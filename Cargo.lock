@@ -96,6 +96,7 @@ dependencies = [
  "ignore",
  "itertools",
  "memmap2",
+ "r2d2",
  "rayon",
  "tracing",
  "tracing-subscriber",
