@@ -24,7 +24,7 @@ pub fn create_revision(
             let new_input_file = NewInputFile::new(
                 &asset.meta.logical_path,
                 asset.hash.as_bytes().as_slice(),
-                if is_inline { &asset.contents } else { &[] },
+                is_inline.then_some(&asset.contents),
             );
 
             if !is_inline {

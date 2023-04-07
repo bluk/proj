@@ -17,7 +17,7 @@ pub struct InputFile {
     pub id: String,
     pub logical_path: String,
     pub content_hash: Vec<u8>,
-    pub content: String,
+    pub content: Option<Vec<u8>>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -72,11 +72,11 @@ pub struct NewInputFile<'a> {
     pub id: String,
     pub logical_path: &'a str,
     pub content_hash: &'a [u8],
-    pub content: &'a [u8],
+    pub content: Option<&'a [u8]>,
 }
 
 impl<'a> NewInputFile<'a> {
-    pub fn new(logical_path: &'a str, content_hash: &'a [u8], content: &'a [u8]) -> Self {
+    pub fn new(logical_path: &'a str, content_hash: &'a [u8], content: Option<&'a [u8]>) -> Self {
         let content_hash_string = format!("{:x}", content_hash.iter().format(""));
         let id = format!("{content_hash_string},{logical_path}");
 
