@@ -1,0 +1,1 @@
+DROP TABLE revision_files;
