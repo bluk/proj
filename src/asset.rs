@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     fs::File,
     io,
@@ -7,38 +8,11 @@ use std::{
 };
 
 use blake3::Hash;
-use diesel::Connection;
 use ignore::Walk;
 use memmap2::Mmap;
 use rayon::prelude::*;
 
-use crate::models::{
-    input_file::NewInputFile, revision, revision_file::NewRevisionFile, DbConn, DbPool,
-};
-
 const INLINE_CONTENT: &[&str] = &["hbs", "html", "md"];
-
-#[derive(Debug)]
-pub struct Local {
-    pub disk_path: PathBuf,
-    pub logical_path: String,
-    pub size: u64,
-}
-
-impl Local {
-    pub fn is_inline(&self) -> bool {
-        self.disk_path
-            .extension()
-            .map(|ext| INLINE_CONTENT.contains(&ext.to_string_lossy().to_lowercase().as_ref()))
-            .unwrap_or_default()
-    }
-}
-
-pub struct Content {
-    meta: Local,
-    contents: Box<dyn Deref<Target = [u8]> + Send + Sync>,
-    hash: Hash,
-}
 
 #[derive(Debug)]
 struct EmptyContents {}
@@ -51,58 +25,57 @@ impl Deref for EmptyContents {
     }
 }
 
-impl Content {
-    pub fn new(meta: Local) -> io::Result<Self> {
-        let contents: Box<dyn Deref<Target = [u8]> + Send + Sync> = if meta.size == 0 {
-            Box::new(EmptyContents {})
+type Contents = Box<dyn Deref<Target = [u8]> + Send + Sync>;
+
+#[derive(Debug)]
+pub struct Metadata {
+    pub disk_path: PathBuf,
+    pub logical_path: String,
+    pub size: u64,
+}
+
+impl Metadata {
+    pub fn is_inline(&self) -> bool {
+        self.disk_path
+            .extension()
+            .map(|ext| INLINE_CONTENT.contains(&ext.to_string_lossy().to_lowercase().as_ref()))
+            .unwrap_or_default()
+    }
+
+    fn contents(&self) -> io::Result<Contents> {
+        if self.size == 0 {
+            Ok(Box::new(EmptyContents {}))
         } else {
-            let file = File::open(&meta.disk_path)?;
+            let file = File::open(&self.disk_path)?;
             let mm = unsafe { Mmap::map(&file)? };
-            Box::new(mm)
-        };
-
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(meta.logical_path.as_bytes());
-        hasher.update(b"/");
-        hasher.update(&contents);
-        let hash = hasher.finalize();
-
-        Ok(Self {
-            meta,
-            contents,
-            hash,
-        })
+            Ok(Box::new(mm))
+        }
     }
 }
 
-#[derive(Debug)]
-pub struct Config<'a> {
-    pub src: &'a Path,
-    pub dest: &'a Path,
+pub struct Asset {
+    pub meta: Metadata,
+    pub contents: Contents,
+    pub hash: Hash,
 }
 
-pub fn process(sink: &mut mpsc::Sender<Content>, asset: Local) -> anyhow::Result<()> {
-    tracing::debug!("Processing: {}", asset.logical_path);
-
-    let content = Content::new(asset)?;
-    sink.send(content)?;
-
-    Ok(())
+impl fmt::Debug for Asset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Content")
+            .field("meta", &self.meta)
+            // .field("contents", &self.contents)
+            .field("hash", &self.hash)
+            .finish()
+    }
 }
 
-pub fn walk_dir<P, F>(config: &Config, dir: P, mut f: F) -> anyhow::Result<()>
+fn walk_dir<F>(dir: &Path, mut f: F) -> anyhow::Result<()>
 where
-    P: AsRef<Path>,
-    F: FnMut(Local) -> anyhow::Result<()>,
+    F: FnMut(Metadata) -> anyhow::Result<()>,
 {
-    let dir = &config.src.join(dir);
     tracing::debug!("Working on {}", dir.display());
-
     assert!(dir.is_dir());
-
-    let base_path = dir
-        .parent()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "directory is not valid"))?;
+    let base_path = dir.parent().expect("src directory does not exist");
 
     itertools::process_results(Walk::new(dir), |entries| {
         for disk_path in entries
@@ -110,15 +83,14 @@ where
             .filter(|disk_path| disk_path.is_file())
         {
             let logical_path = disk_path
-                .strip_prefix(base_path)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?
+                .strip_prefix(base_path)?
                 .to_str()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "not a valid UTF-8 path"))?
-                .to_owned();
+                .to_string();
             let metadata = disk_path.metadata()?;
             let size = metadata.len();
 
-            f(Local {
+            f(Metadata {
                 disk_path,
                 logical_path,
                 size,
@@ -126,68 +98,71 @@ where
         }
 
         Ok::<_, anyhow::Error>(())
-    })
-    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))??;
+    })??;
 
     Ok(())
 }
 
-pub fn walk(config: &Config, pool: &DbPool) -> anyhow::Result<()> {
+const SRC_SUB_DIRS: &[&str] = &["content", "static", "templates"];
+
+fn walk_src_dirs<F>(src: &Path, mut f: F) -> anyhow::Result<()>
+where
+    F: FnMut(Metadata) -> anyhow::Result<()>,
+{
+    for &prefix in SRC_SUB_DIRS {
+        let dir = &src.join(prefix);
+        walk_dir(dir, &mut f)?;
+    }
+
+    Ok(())
+}
+
+pub fn process(sink: &mut mpsc::Sender<Asset>, meta: Metadata) -> anyhow::Result<()> {
+    tracing::debug!("Processing: {}", meta.logical_path);
+
+    let contents = meta.contents()?;
+
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(meta.logical_path.as_bytes());
+    hasher.update(b"/");
+    hasher.update(&contents);
+    let hash = hasher.finalize();
+
+    sink.send(Asset {
+        meta,
+        contents,
+        hash,
+    })?;
+
+    Ok(())
+}
+
+pub fn walk<F>(src: &Path, f: F) -> anyhow::Result<()>
+where
+    F: FnOnce(mpsc::Receiver<Asset>) -> anyhow::Result<()> + Sync + Send,
+{
     let (tx, rx) = mpsc::channel();
 
     let mut walk_result = Ok(());
     let mut send_result = Ok(());
+    let mut process_result = Ok(());
 
     rayon::scope(|s| {
         let walk_result = &mut walk_result;
         let send_result = &mut send_result;
+        let process_result = &mut process_result;
 
         s.spawn(move |_| {
-            *walk_result = (|| -> anyhow::Result<()> {
-                for &prefix in &["content", "static", "templates"] {
-                    walk_dir(config, prefix, |asset| {
-                        tx.send(asset)?;
-                        Ok(())
-                    })?;
-                }
-
+            *walk_result = walk_src_dirs(src, |metadata| {
+                tx.send(metadata)?;
                 Ok(())
-            })();
+            });
         });
 
-        let (event_tx, event_rx) = mpsc::channel::<Content>();
+        let (event_tx, event_rx) = mpsc::channel::<Asset>();
 
         s.spawn(move |_| {
-            let mut conn = pool.get().unwrap();
-
-            let conn: &mut DbConn = &mut conn;
-
-            conn.transaction(|conn| -> anyhow::Result<()> {
-                let rev_id = revision::create(conn)?;
-
-                while let Ok(content) = event_rx.recv() {
-                    let is_inline = content.meta.is_inline();
-
-                    let new_input_file = NewInputFile::new(
-                        &content.meta.logical_path,
-                        content.hash.as_bytes().as_slice(),
-                        if is_inline { &content.contents } else { &[] },
-                    );
-
-                    if !is_inline {
-                        // TODO: Copy file to the cache as the content hash name
-                    }
-
-                    new_input_file.create(conn).unwrap();
-
-                    NewRevisionFile::new(rev_id, &new_input_file.id)
-                        .create(conn)
-                        .unwrap();
-                }
-
-                Ok(())
-            })
-            .unwrap();
+            *process_result = f(event_rx);
         });
 
         *send_result = rx
@@ -197,5 +172,5 @@ pub fn walk(config: &Config, pool: &DbPool) -> anyhow::Result<()> {
             .collect::<Result<_, _>>();
     });
 
-    walk_result.and(send_result)
+    walk_result.and(send_result).and(process_result)
 }

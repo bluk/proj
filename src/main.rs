@@ -8,9 +8,8 @@ use clap::{command, Parser};
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
-use crate::asset::Config;
-
 mod asset;
+mod build;
 mod models;
 mod schema;
 
@@ -23,6 +22,12 @@ struct Args {
     dest: Option<PathBuf>,
     #[arg(long, env)]
     database_url: String,
+}
+
+#[derive(Debug)]
+struct Config<'a> {
+    pub src: &'a Path,
+    pub dest: &'a Path,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -45,9 +50,17 @@ fn main() -> anyhow::Result<()> {
         fs::create_dir_all(dest)?;
     }
 
+    let config = Config { src, dest };
+
     info!("Building {} to {}", src.display(), dest.display(),);
 
-    asset::walk(&Config { src, dest }, &pool)?;
+    asset::walk(config.src, move |evt_tx| {
+        let mut conn = pool.get()?;
+
+        build::create_revision(&evt_tx, &mut conn)?;
+
+        Ok(())
+    })?;
 
     Ok(())
 }
