@@ -4,7 +4,7 @@ use chrono::NaiveDateTime;
 use diesel::{
     backend::Backend,
     expression::AsExpression,
-    helper_types::{AsSelect, Select},
+    helper_types::{AsSelect, Filter, Select},
     prelude::*,
     sql_types::Integer,
 };
@@ -33,6 +33,7 @@ where
 }
 
 type All<Db> = Select<revisions::table, AsSelect<Revision, Db>>;
+type ById<T, Db> = Filter<All<Db>, WithId<T>>;
 
 impl Revision {
     #[inline]
@@ -42,6 +43,15 @@ impl Revision {
         Db: Backend,
     {
         revisions::table.select(Self::as_select())
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn by_id<Db>(id: Id) -> ById<DbId, Db>
+    where
+        Db: Backend,
+    {
+        Self::all().filter(with_id(id.0))
     }
 }
 

@@ -12,6 +12,8 @@ use itertools::Itertools;
 
 use crate::{models::DbConn, schema::input_files};
 
+use super::{revision::Revision, revision_file::RevisionFile};
+
 #[derive(Debug, PartialEq, Queryable, Selectable, Identifiable)]
 pub struct InputFile {
     pub id: String,
@@ -53,6 +55,14 @@ impl InputFile {
         Db: Backend,
     {
         Self::all().filter(with_id(id))
+    }
+
+    #[inline]
+    pub fn with_revision(rev: &Revision, conn: &mut DbConn) -> QueryResult<Vec<Self>> {
+        RevisionFile::belonging_to(rev)
+            .inner_join(input_files::table)
+            .select(Self::as_select())
+            .load(conn)
     }
 }
 
@@ -102,5 +112,45 @@ impl<'a> NewInputFile<'a> {
         } else {
             Ok(0)
         }
+    }
+}
+
+type MetaAll<Db> = Select<input_files::table, AsSelect<InputFileMeta, Db>>;
+type MetaById<T, Db> = Filter<MetaAll<Db>, WithId<T>>;
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Debug, PartialEq, Queryable, Selectable, Identifiable)]
+#[diesel(table_name = input_files)]
+pub struct InputFileMeta {
+    pub id: String,
+    pub logical_path: String,
+    pub content_hash: Vec<u8>,
+}
+
+impl InputFileMeta {
+    #[inline]
+    #[must_use]
+    pub fn all<Db>() -> MetaAll<Db>
+    where
+        Db: Backend,
+    {
+        input_files::table.select(Self::as_select())
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn by_id<Db>(id: &str) -> MetaById<&'_ str, Db>
+    where
+        Db: Backend,
+    {
+        Self::all().filter(with_id(id))
+    }
+
+    #[inline]
+    pub fn with_revision(rev: &Revision, conn: &mut DbConn) -> QueryResult<Vec<Self>> {
+        RevisionFile::belonging_to(rev)
+            .inner_join(input_files::table)
+            .select(Self::as_select())
+            .load(conn)
     }
 }
