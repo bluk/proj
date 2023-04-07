@@ -7,6 +7,7 @@ use std::{
     sync::mpsc::{self},
 };
 
+use anyhow::anyhow;
 use blake3::Hash;
 use ignore::Walk;
 use memmap2::Mmap;
@@ -137,32 +138,33 @@ pub fn process(sink: &mut mpsc::Sender<Asset>, meta: Metadata) -> anyhow::Result
     Ok(())
 }
 
-pub fn walk<F>(src: &Path, f: F) -> anyhow::Result<()>
+pub fn walk<F, T>(src: &Path, f: F) -> anyhow::Result<T>
 where
-    F: FnOnce(mpsc::Receiver<Asset>) -> anyhow::Result<()> + Sync + Send,
+    F: FnOnce(mpsc::Receiver<Asset>) -> anyhow::Result<T> + Sync + Send,
+    T: Sync + Send,
 {
     let (tx, rx) = mpsc::channel();
 
     let mut walk_result = Ok(());
     let mut send_result = Ok(());
-    let mut process_result = Ok(());
+    let mut process_result = Err(anyhow!(""));
 
     rayon::scope(|s| {
         let walk_result = &mut walk_result;
         let send_result = &mut send_result;
         let process_result = &mut process_result;
 
+        let (event_tx, event_rx) = mpsc::channel::<Asset>();
+
+        s.spawn(move |_| {
+            *process_result = f(event_rx);
+        });
+
         s.spawn(move |_| {
             *walk_result = walk_src_dirs(src, |metadata| {
                 tx.send(metadata)?;
                 Ok(())
             });
-        });
-
-        let (event_tx, event_rx) = mpsc::channel::<Asset>();
-
-        s.spawn(move |_| {
-            *process_result = f(event_rx);
         });
 
         *send_result = rx
@@ -172,5 +174,9 @@ where
             .collect::<Result<_, _>>();
     });
 
-    walk_result.and(send_result).and(process_result)
+    walk_result?;
+    send_result?;
+    let res = process_result?;
+
+    Ok(res)
 }

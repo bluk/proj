@@ -54,13 +54,13 @@ fn main() -> anyhow::Result<()> {
 
     info!("Building {} to {}", src.display(), dest.display(),);
 
-    asset::walk(config.src, move |evt_tx| {
+    let rev_id = asset::walk(config.src, move |evt_tx| {
         let mut conn = pool.get()?;
 
-        build::create_revision(&evt_tx, &mut conn)?;
-
-        Ok(())
+        build::create_revision(&evt_tx, &mut conn)
     })?;
+
+    info!("Created revision {}", rev_id);
 
     Ok(())
 }

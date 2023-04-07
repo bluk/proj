@@ -11,8 +11,11 @@ use crate::{
     models::{input_file::NewInputFile, revision, revision_file::NewRevisionFile, DbConn},
 };
 
-pub fn create_revision(evt_rx: &mpsc::Receiver<Asset>, conn: &mut DbConn) -> anyhow::Result<()> {
-    conn.transaction(|conn| -> anyhow::Result<()> {
+pub fn create_revision(
+    evt_rx: &mpsc::Receiver<Asset>,
+    conn: &mut DbConn,
+) -> anyhow::Result<revision::Id> {
+    conn.transaction(|conn| {
         let rev_id = revision::create(conn)?;
 
         while let Ok(asset) = evt_rx.recv() {
@@ -33,8 +36,6 @@ pub fn create_revision(evt_rx: &mpsc::Receiver<Asset>, conn: &mut DbConn) -> any
             NewRevisionFile::new(rev_id, &new_input_file.id).create(conn)?;
         }
 
-        Ok(())
-    })?;
-
-    Ok(())
+        Ok(rev_id)
+    })
 }
