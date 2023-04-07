@@ -10,6 +10,9 @@ CREATE TABLE input_files (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE UNIQUE INDEX idx_input_files_logical_path ON input_files(logical_path);
+CREATE UNIQUE INDEX idx_input_files_content_hash ON input_files(content_hash);
+
 CREATE TRIGGER update_input_files_updated_at
 AFTER UPDATE OF id, logical_path, content_hash, content, created_at ON input_files
 FOR EACH ROW
