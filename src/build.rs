@@ -60,10 +60,18 @@ pub fn create_revision(
             NewRevisionFile::new(rev.id, new_input_file.id).create(conn)?;
 
             match input_file::ty(&asset.meta.logical_path) {
+                Ty::Content(path) => {
+                    if let Some(path) = path.strip_suffix(".md") {
+                        let path = format!("{path}.html");
+                        tracing::trace!("Adding content route: {}", path);
+                        NewRoute::new(rev.id, &path, new_input_file.id).create(conn)?;
+                    }
+                }
                 Ty::Static(path) => {
                     tracing::trace!("Adding static route: {}", path);
                     NewRoute::new(rev.id, path, new_input_file.id).create(conn)?;
                 }
+                Ty::Template(_) => {}
                 Ty::Unknown => {
                     todo!()
                 }

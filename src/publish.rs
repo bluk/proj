@@ -4,6 +4,7 @@ use std::{fs, path::Path};
 
 use diesel::prelude::*;
 use itertools::Itertools;
+use pulldown_cmark::{html, Options, Parser};
 
 use crate::models::{
     input_file::{InputFile, Ty},
@@ -33,6 +34,21 @@ pub fn dist_revision(
         // TODO: Determine if from the static files and do the write/copy then
 
         match input_file.ty() {
+            Ty::Content(_) => {
+                if let Some(contents) = input_file.contents {
+                    let contents = core::str::from_utf8(&contents)?;
+                    let options = Options::empty();
+                    let parser = Parser::new_ext(contents, options);
+
+                    let mut html_output = String::new();
+                    html::push_html(&mut html_output, parser);
+
+                    tracing::trace!("Writing content to file: {}", dest_path.display());
+                    fs::write(dest_path, html_output)?;
+                } else {
+                    unreachable!("content was not in database");
+                }
+            }
             Ty::Static(_) => {
                 if let Some(contents) = input_file.contents {
                     tracing::trace!("Writing file: {}", dest_path.display());
@@ -50,6 +66,7 @@ pub fn dist_revision(
                     fs::copy(cache_path, dest_path)?;
                 }
             }
+            Ty::Template(_) => {}
             Ty::Unknown => {
                 todo!()
             }
