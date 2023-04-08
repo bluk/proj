@@ -4,10 +4,9 @@ diesel::table! {
     input_files (id) {
         id -> Text,
         logical_path -> Text,
-        content_hash -> Binary,
-        content -> Nullable<Binary>,
+        contents_hash -> Binary,
+        contents -> Nullable<Binary>,
         created_at -> Timestamp,
-        updated_at -> Timestamp,
     }
 }
 
@@ -22,7 +21,6 @@ diesel::table! {
     revisions (id) {
         id -> Integer,
         created_at -> Timestamp,
-        updated_at -> Timestamp,
     }
 }
 

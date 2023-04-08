@@ -19,7 +19,7 @@ pub fn dist_revision(dest: &Path, rev: &Revision, conn: &mut DbConn) -> anyhow::
         let path = dest.join(Path::new(&r.route));
         let input_file = InputFile::by_id(&r.input_file_id).get_result(conn)?;
 
-        if let Some(contents) = input_file.content {
+        if let Some(contents) = input_file.contents {
             tracing::trace!("Writing file: {}", path.display());
             fs::write(path, contents)?;
         }

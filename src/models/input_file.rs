@@ -18,10 +18,9 @@ use super::{revision::Revision, revision_file::RevisionFile};
 pub struct InputFile {
     pub id: String,
     pub logical_path: String,
-    pub content_hash: Vec<u8>,
-    pub content: Option<Vec<u8>>,
+    pub contents_hash: Vec<u8>,
+    pub contents: Option<Vec<u8>>,
     pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 type WithId<T> = diesel::dsl::Eq<input_files::id, T>;
@@ -81,20 +80,20 @@ impl fmt::Debug for Id {
 pub struct NewInputFile<'a> {
     pub id: String,
     pub logical_path: &'a str,
-    pub content_hash: &'a [u8],
-    pub content: Option<&'a [u8]>,
+    pub contents_hash: &'a [u8],
+    pub contents: Option<&'a [u8]>,
 }
 
 impl<'a> NewInputFile<'a> {
-    pub fn new(logical_path: &'a str, content_hash: &'a [u8], content: Option<&'a [u8]>) -> Self {
-        let content_hash_string = format!("{:x}", content_hash.iter().format(""));
+    pub fn new(logical_path: &'a str, contents_hash: &'a [u8], contents: Option<&'a [u8]>) -> Self {
+        let content_hash_string = format!("{:x}", contents_hash.iter().format(""));
         let id = format!("{content_hash_string},{logical_path}");
 
         Self {
             id,
             logical_path,
-            content_hash,
-            content,
+            contents_hash,
+            contents,
         }
     }
 
@@ -124,7 +123,7 @@ type MetaById<T, Db> = Filter<MetaAll<Db>, WithId<T>>;
 pub struct InputFileMeta {
     pub id: String,
     pub logical_path: String,
-    pub content_hash: Vec<u8>,
+    pub contents_hash: Vec<u8>,
 }
 
 impl InputFileMeta {

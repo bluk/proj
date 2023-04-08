@@ -18,7 +18,6 @@ use crate::{
 pub struct Revision {
     pub id: DbId,
     pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 type WithId<T> = diesel::dsl::Eq<revisions::id, T>;
