@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use clap::{command, Parser};
 
@@ -14,10 +14,12 @@ mod schema;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(short, long)]
-    src: Option<PathBuf>,
-    #[arg(short, long)]
-    dest: Option<PathBuf>,
+    #[arg(short, long, default_value = "./")]
+    src: PathBuf,
+    #[arg(short, long, default_value = "./build")]
+    dest: PathBuf,
+    #[arg(short, long, default_value = "./.cache")]
+    cache_dir: PathBuf,
     #[arg(long, env)]
     database_url: String,
 }
@@ -32,9 +34,9 @@ fn main() -> anyhow::Result<()> {
 
     let pool = models::establish_connection_pool(&args.database_url)?;
 
-    let src = args.src.as_deref().unwrap_or_else(|| Path::new("./"));
+    let src = &args.src;
     assert!(src.is_dir());
-    let dest = args.dest.as_deref().unwrap_or_else(|| Path::new("./build"));
+    let dest = &args.dest;
 
     info!("Building {} to {}", src.display(), dest.display(),);
 
