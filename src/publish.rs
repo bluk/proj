@@ -5,7 +5,12 @@ use std::{fs, path::Path};
 use diesel::prelude::*;
 use itertools::Itertools;
 
-use crate::models::{input_file::InputFile, revision::Revision, route::Route, DbConn};
+use crate::models::{
+    input_file::{InputFile, Ty},
+    revision::Revision,
+    route::Route,
+    DbConn,
+};
 
 pub fn dist_revision(
     dest: &Path,
@@ -22,22 +27,32 @@ pub fn dist_revision(
     let routes = Route::with_revision(rev, conn)?;
 
     for r in routes {
-        let path = dest.join(Path::new(&r.route));
+        let dest_path = dest.join(Path::new(&r.route));
         let input_file = InputFile::by_id(&r.input_file_id).get_result(conn)?;
 
-        if let Some(contents) = input_file.contents {
-            tracing::trace!("Writing file: {}", path.display());
-            fs::write(path, contents)?;
-        } else {
-            let content_hash_string = format!("{:x}", input_file.contents_hash.iter().format(""));
-            let cache_path = cache_dir.join(content_hash_string);
-            assert!(cache_path.exists());
-            tracing::trace!(
-                "Copying file {} to {}",
-                cache_path.display(),
-                path.display()
-            );
-            fs::copy(cache_path, path)?;
+        // TODO: Determine if from the static files and do the write/copy then
+
+        match input_file.ty() {
+            Ty::Static(_) => {
+                if let Some(contents) = input_file.contents {
+                    tracing::trace!("Writing file: {}", dest_path.display());
+                    fs::write(dest_path, contents)?;
+                } else {
+                    let content_hash_string =
+                        format!("{:x}", input_file.contents_hash.iter().format(""));
+                    let cache_path = cache_dir.join(content_hash_string);
+                    assert!(cache_path.exists());
+                    tracing::trace!(
+                        "Copying file {} to {}",
+                        cache_path.display(),
+                        dest_path.display()
+                    );
+                    fs::copy(cache_path, dest_path)?;
+                }
+            }
+            Ty::Unknown => {
+                todo!()
+            }
         }
     }
 

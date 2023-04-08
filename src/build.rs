@@ -10,8 +10,11 @@ use itertools::Itertools;
 use crate::{
     asset::Asset,
     models::{
-        input_file::NewInputFile, revision::Revision, revision_file::NewRevisionFile,
-        route::NewRoute, DbConn,
+        input_file::{self, NewInputFile, Ty},
+        revision::Revision,
+        revision_file::NewRevisionFile,
+        route::NewRoute,
+        DbConn,
     },
 };
 
@@ -56,9 +59,14 @@ pub fn create_revision(
 
             NewRevisionFile::new(rev.id, new_input_file.id).create(conn)?;
 
-            if let Some(static_path) = new_input_file.logical_path.strip_prefix("static/") {
-                tracing::trace!("Adding static route: {}", static_path);
-                NewRoute::new(rev.id, static_path, new_input_file.id).create(conn)?;
+            match input_file::ty(&asset.meta.logical_path) {
+                Ty::Static(path) => {
+                    tracing::trace!("Adding static route: {}", path);
+                    NewRoute::new(rev.id, path, new_input_file.id).create(conn)?;
+                }
+                Ty::Unknown => {
+                    todo!()
+                }
             }
         }
 
