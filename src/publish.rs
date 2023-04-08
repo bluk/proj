@@ -3,10 +3,16 @@
 use std::{fs, path::Path};
 
 use diesel::prelude::*;
+use itertools::Itertools;
 
 use crate::models::{input_file::InputFile, revision::Revision, route::Route, DbConn};
 
-pub fn dist_revision(dest: &Path, rev: &Revision, conn: &mut DbConn) -> anyhow::Result<()> {
+pub fn dist_revision(
+    dest: &Path,
+    rev: &Revision,
+    cache_dir: &Path,
+    conn: &mut DbConn,
+) -> anyhow::Result<()> {
     if dest.exists() {
         assert!(dest.is_dir());
     } else {
@@ -22,6 +28,16 @@ pub fn dist_revision(dest: &Path, rev: &Revision, conn: &mut DbConn) -> anyhow::
         if let Some(contents) = input_file.contents {
             tracing::trace!("Writing file: {}", path.display());
             fs::write(path, contents)?;
+        } else {
+            let content_hash_string = format!("{:x}", input_file.contents_hash.iter().format(""));
+            let cache_path = cache_dir.join(content_hash_string);
+            assert!(cache_path.exists());
+            tracing::trace!(
+                "Copying file {} to {}",
+                cache_path.display(),
+                path.display()
+            );
+            fs::copy(cache_path, path)?;
         }
     }
 

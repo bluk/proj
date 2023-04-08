@@ -8,7 +8,6 @@ use diesel::{
     prelude::*,
     sql_types::Text,
 };
-use itertools::Itertools;
 
 use crate::{models::DbConn, schema::input_files};
 
@@ -78,17 +77,19 @@ impl fmt::Debug for Id {
 #[derive(Insertable)]
 #[diesel(table_name = input_files)]
 pub struct NewInputFile<'a> {
-    pub id: String,
+    pub id: &'a str,
     pub logical_path: &'a str,
     pub contents_hash: &'a [u8],
     pub contents: Option<&'a [u8]>,
 }
 
 impl<'a> NewInputFile<'a> {
-    pub fn new(logical_path: &'a str, contents_hash: &'a [u8], contents: Option<&'a [u8]>) -> Self {
-        let content_hash_string = format!("{:x}", contents_hash.iter().format(""));
-        let id = format!("{content_hash_string},{logical_path}");
-
+    pub fn new(
+        id: &'a str,
+        logical_path: &'a str,
+        contents_hash: &'a [u8],
+        contents: Option<&'a [u8]>,
+    ) -> Self {
         Self {
             id,
             logical_path,

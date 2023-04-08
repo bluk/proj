@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use clap::{command, Parser};
 
@@ -38,19 +38,26 @@ fn main() -> anyhow::Result<()> {
     assert!(src.is_dir());
     let dest = &args.dest;
 
+    let cache_dir = &args.cache_dir;
+    if cache_dir.exists() {
+        assert!(cache_dir.is_dir());
+    } else {
+        fs::create_dir_all(cache_dir)?;
+    }
+
     info!("Building {} to {}", src.display(), dest.display(),);
 
     let rev = asset::walk(src, |evt_tx| {
         let mut conn = pool.get()?;
 
-        build::create_revision(&evt_tx, &mut conn)
+        build::create_revision(&evt_tx, cache_dir, &mut conn)
     })?;
 
     info!("Created revision {}", rev.id);
 
     let mut conn = pool.get()?;
 
-    publish::dist_revision(dest, &rev, &mut conn)?;
+    publish::dist_revision(dest, &rev, cache_dir, &mut conn)?;
 
     Ok(())
 }
