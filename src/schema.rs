@@ -26,11 +26,22 @@ diesel::table! {
     }
 }
 
+diesel::table! {
+    routes (revision_id, route) {
+        revision_id -> Integer,
+        route -> Text,
+        input_file_id -> Text,
+    }
+}
+
 diesel::joinable!(revision_files -> input_files (input_file_id));
 diesel::joinable!(revision_files -> revisions (revision_id));
+diesel::joinable!(routes -> input_files (input_file_id));
+diesel::joinable!(routes -> revisions (revision_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     input_files,
     revision_files,
     revisions,
+    routes,
 );

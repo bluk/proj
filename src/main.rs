@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use clap::{command, Parser};
 
@@ -11,6 +8,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 mod asset;
 mod build;
 mod models;
+mod publish;
 mod schema;
 
 #[derive(Parser, Debug)]
@@ -22,12 +20,6 @@ struct Args {
     dest: Option<PathBuf>,
     #[arg(long, env)]
     database_url: String,
-}
-
-#[derive(Debug)]
-struct Config<'a> {
-    pub src: &'a Path,
-    pub dest: &'a Path,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -42,25 +34,21 @@ fn main() -> anyhow::Result<()> {
 
     let src = args.src.as_deref().unwrap_or_else(|| Path::new("./"));
     assert!(src.is_dir());
-
     let dest = args.dest.as_deref().unwrap_or_else(|| Path::new("./build"));
-    if dest.exists() {
-        assert!(dest.is_dir());
-    } else {
-        fs::create_dir_all(dest)?;
-    }
-
-    let config = Config { src, dest };
 
     info!("Building {} to {}", src.display(), dest.display(),);
 
-    let rev_id = asset::walk(config.src, move |evt_tx| {
+    let rev = asset::walk(src, |evt_tx| {
         let mut conn = pool.get()?;
 
         build::create_revision(&evt_tx, &mut conn)
     })?;
 
-    info!("Created revision {}", rev_id);
+    info!("Created revision {}", rev.id);
+
+    let mut conn = pool.get()?;
+
+    publish::dist_revision(dest, &rev, &mut conn)?;
 
     Ok(())
 }

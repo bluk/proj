@@ -6,6 +6,7 @@ use diesel::{
 pub mod input_file;
 pub mod revision;
 pub mod revision_file;
+pub mod route;
 
 pub type DbId = i32;
 pub type DbConn = SqliteConnection;

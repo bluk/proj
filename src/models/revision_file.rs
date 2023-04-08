@@ -1,11 +1,7 @@
 use diesel::prelude::*;
 
 use crate::{
-    models::{
-        input_file::InputFile,
-        revision::{self, Revision},
-        DbConn, DbId,
-    },
+    models::{input_file::InputFile, revision::Revision, DbConn, DbId},
     schema::revision_files,
 };
 
@@ -28,9 +24,9 @@ pub struct NewRevisionFile<'a> {
 }
 
 impl<'a> NewRevisionFile<'a> {
-    pub fn new(revision_id: revision::Id, input_file_id: &'a str) -> Self {
+    pub fn new(revision_id: DbId, input_file_id: &'a str) -> Self {
         Self {
-            revision_id: revision_id.0,
+            revision_id,
             input_file_id,
         }
     }

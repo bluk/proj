@@ -53,6 +53,12 @@ impl Revision {
     {
         Self::all().filter(with_id(id.0))
     }
+
+    pub fn create(conn: &mut DbConn) -> QueryResult<Self> {
+        diesel::insert_into(revisions::table)
+            .default_values()
+            .get_result(conn)
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -68,15 +74,4 @@ impl fmt::Display for Id {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         fmt::Display::fmt(&self.0, f)
     }
-}
-
-pub fn create(conn: &mut DbConn) -> QueryResult<Id> {
-    conn.transaction(move |conn| {
-        let id = diesel::insert_into(revisions::table)
-            .default_values()
-            .returning(revisions::dsl::id)
-            .get_result(conn)?;
-
-        Ok(Id(id))
-    })
 }
