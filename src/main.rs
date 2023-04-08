@@ -7,6 +7,7 @@ use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 mod asset;
 mod build;
+mod content;
 mod models;
 mod publish;
 mod schema;
