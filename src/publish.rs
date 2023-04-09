@@ -8,6 +8,7 @@ use pulldown_cmark::{html, Options, Parser};
 
 use crate::models::{
     input_file::{InputFile, Ty},
+    page::Page,
     revision::Revision,
     route::Route,
     DbConn,
@@ -36,7 +37,11 @@ pub fn dist_revision(
         match input_file.ty() {
             Ty::Content(_) => {
                 if let Some(contents) = input_file.contents {
-                    let contents = core::str::from_utf8(&contents)?;
+                    let page = Page::by_input_file_id(&input_file.id).get_result(conn)?;
+
+                    let (_, contents) = contents.split_at(usize::try_from(page.offset)?);
+                    let contents = core::str::from_utf8(contents)?;
+
                     let options = Options::empty();
                     let parser = Parser::new_ext(contents, options);
 

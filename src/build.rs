@@ -9,8 +9,10 @@ use itertools::Itertools;
 
 use crate::{
     asset::Asset,
+    content,
     models::{
         input_file::{self, NewInputFile, Ty},
+        page::NewPage,
         revision::Revision,
         revision_file::NewRevisionFile,
         route::NewRoute,
@@ -39,7 +41,7 @@ pub fn create_revision(
                 asset.hash.as_bytes().as_slice(),
                 is_inline.then_some(&asset.contents),
             );
-            new_input_file.create(conn)?;
+            let created_input_file = new_input_file.create(conn)? != 0;
 
             if !is_inline {
                 let cache_path = cache_dir.join(&content_hash_string);
@@ -65,6 +67,29 @@ pub fn create_revision(
                         let path = format!("{path}.html");
                         tracing::trace!("Adding content route: {}", path);
                         NewRoute::new(rev.id, &path, new_input_file.id).create(conn)?;
+
+                        let contents = core::str::from_utf8(&asset.contents)?;
+                        let (front_matter, content_offset, _) = content::parse(contents)?;
+
+                        if created_input_file {
+                            let page = NewPage {
+                                input_file_id: &id,
+                                front_matter,
+                                offset: i32::try_from(content_offset)?,
+                                date: None,
+                                description: None,
+                                excerpt: None,
+                                draft: false,
+                                expiry_date: None,
+                                keywords: None,
+                                template: None,
+                                publish_date: None,
+                                summary: None,
+                                title: None,
+                            };
+
+                            page.create(conn)?;
+                        }
                     }
                 }
                 Ty::Static(path) => {
