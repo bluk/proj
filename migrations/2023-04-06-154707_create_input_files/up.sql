@@ -9,5 +9,5 @@ CREATE TABLE input_files (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX idx_input_files_logical_path ON input_files(logical_path);
-CREATE UNIQUE INDEX idx_input_files_contents_hash ON input_files(contents_hash);
+CREATE INDEX idx_input_files_logical_path ON input_files(logical_path);
+CREATE INDEX idx_input_files_contents_hash ON input_files(contents_hash);
