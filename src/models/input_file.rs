@@ -47,6 +47,7 @@ pub struct InputFile {
 }
 
 type WithId<T> = diesel::dsl::Eq<input_files::id, T>;
+type WithLogicalPath<T> = diesel::dsl::Eq<input_files::logical_path, T>;
 
 #[inline]
 #[must_use]
@@ -55,6 +56,15 @@ where
     T: AsExpression<Text>,
 {
     input_files::id.eq(id)
+}
+
+#[inline]
+#[must_use]
+pub fn with_logical_path<T>(logical_path: T) -> WithLogicalPath<T>
+where
+    T: AsExpression<Text>,
+{
+    input_files::logical_path.eq(logical_path)
 }
 
 type All<Db> = Select<input_files::table, AsSelect<InputFile, Db>>;
@@ -85,6 +95,15 @@ impl InputFile {
             .inner_join(input_files::table)
             .select(Self::as_select())
             .load(conn)
+    }
+
+    #[inline]
+    pub fn template(rev: &Revision, name: &str, conn: &mut DbConn) -> QueryResult<Self> {
+        RevisionFile::belonging_to(rev)
+            .inner_join(input_files::table)
+            .filter(with_logical_path(format!("templates/{name}")))
+            .select(Self::as_select())
+            .get_result(conn)
     }
 
     #[must_use]

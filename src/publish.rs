@@ -3,8 +3,10 @@
 use std::{fs, path::Path};
 
 use diesel::prelude::*;
+use handlebars::Handlebars;
 use itertools::Itertools;
 use pulldown_cmark::{html, Options, Parser};
+use serde_json::json;
 
 use crate::models::{
     input_file::{InputFile, Ty},
@@ -28,28 +30,42 @@ pub fn dist_revision(
 
     let routes = Route::with_revision(rev, conn)?;
 
+    let mut templates = Handlebars::new();
+
     for r in routes {
         let dest_path = dest.join(Path::new(&r.route));
         let input_file = InputFile::by_id(&r.input_file_id).get_result(conn)?;
-
-        // TODO: Determine if from the static files and do the write/copy then
 
         match input_file.ty() {
             Ty::Content(_) => {
                 if let Some(contents) = input_file.contents {
                     let page = Page::by_input_file_id(&input_file.id).get_result(conn)?;
 
-                    let (_, contents) = contents.split_at(usize::try_from(page.offset)?);
-                    let contents = core::str::from_utf8(contents)?;
+                    if let Some(template_name) = page.template {
+                        if !templates.has_template(&template_name) {
+                            let template = InputFile::template(rev, &template_name, conn)?;
+                            let template_contents = template.contents.unwrap();
+                            let template_string = core::str::from_utf8(&template_contents)?;
+                            templates.register_template_string(&template_name, template_string)?;
+                        }
 
-                    let options = Options::empty();
-                    let parser = Parser::new_ext(contents, options);
+                        let (_, contents) = contents.split_at(usize::try_from(page.offset)?);
+                        let contents = core::str::from_utf8(contents)?;
 
-                    let mut html_output = String::new();
-                    html::push_html(&mut html_output, parser);
+                        let options = Options::empty();
+                        let parser = Parser::new_ext(contents, options);
 
-                    tracing::trace!("Writing content to file: {}", dest_path.display());
-                    fs::write(dest_path, html_output)?;
+                        let mut contents = String::new();
+                        html::push_html(&mut contents, parser);
+
+                        let html_output =
+                            templates.render(&template_name, &json!({ "content": contents }))?;
+
+                        tracing::trace!("Writing content to file: {}", dest_path.display());
+                        fs::write(dest_path, html_output)?;
+                    } else {
+                        todo!();
+                    }
                 } else {
                     unreachable!("content was not in database");
                 }
