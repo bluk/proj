@@ -6,6 +6,7 @@ use std::{fs, path::Path, sync::mpsc};
 
 use diesel::Connection;
 use itertools::Itertools;
+use toml_edit::Document;
 
 use crate::{
     asset::Asset,
@@ -72,7 +73,7 @@ pub fn create_revision(
                         let (front_matter, content_offset, _) = content::parse(contents)?;
 
                         if created_input_file {
-                            let page = NewPage {
+                            let mut page = NewPage {
                                 input_file_id: &id,
                                 front_matter,
                                 offset: i32::try_from(content_offset)?,
@@ -88,7 +89,35 @@ pub fn create_revision(
                                 title: None,
                             };
 
-                            page.create(conn)?;
+                            if let Some(front_matter) = front_matter {
+                                let doc = front_matter.parse::<Document>()?;
+                                page.date = doc.get("date").and_then(|value| {
+                                    value.as_datetime().map(content::convert_datetime)
+                                });
+                                page.description =
+                                    doc.get("description").and_then(toml_edit::Item::as_str);
+                                page.excerpt = doc.get("excerpt").and_then(toml_edit::Item::as_str);
+                                page.draft = doc
+                                    .get("draft")
+                                    .and_then(toml_edit::Item::as_bool)
+                                    .unwrap_or_default();
+                                page.expiry_date = doc.get("expiry_date").and_then(|value| {
+                                    value.as_datetime().map(content::convert_datetime)
+                                });
+                                page.keywords =
+                                    doc.get("keywords").and_then(toml_edit::Item::as_str);
+                                page.publish_date = doc.get("publish_date").and_then(|value| {
+                                    value.as_datetime().map(content::convert_datetime)
+                                });
+                                page.summary = doc.get("summary").and_then(toml_edit::Item::as_str);
+                                page.template =
+                                    doc.get("template").and_then(toml_edit::Item::as_str);
+                                page.title = doc.get("title").and_then(toml_edit::Item::as_str);
+
+                                page.create(conn)?;
+                            } else {
+                                page.create(conn)?;
+                            }
                         }
                     }
                 }

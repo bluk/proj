@@ -1,3 +1,6 @@
+use chrono::prelude::*;
+use toml_edit::Datetime;
+
 #[derive(Debug)]
 enum State {
     SearchForBeginMarker,
@@ -151,6 +154,48 @@ pub fn parse(contents: &str) -> Result<(Option<&str>, usize, &str), Error> {
                 return Ok((Some(front_matter), *contents_start, contents));
             }
         }
+    }
+}
+
+pub fn convert_datetime(value: &Datetime) -> chrono::NaiveDateTime {
+    let now = Local::now();
+
+    let date = if let Some(date) = value.date {
+        NaiveDate::from_ymd_opt(
+            i32::from(date.year),
+            u32::from(date.month),
+            u32::from(date.day),
+        )
+        .expect("naive date could not be created from ymd")
+    } else {
+        now.date_naive()
+    };
+
+    let datetime = if let Some(time) = value.time {
+        date.and_hms_nano_opt(
+            u32::from(time.hour),
+            u32::from(time.minute),
+            u32::from(time.second),
+            time.nanosecond,
+        )
+        .expect("naive date time could not be created from hms_nano")
+    } else {
+        date.and_time(now.time())
+    };
+
+    if let Some(offset) = value.offset {
+        match offset {
+            toml_edit::Offset::Z => datetime.and_local_timezone(Utc).unwrap().naive_utc(),
+            toml_edit::Offset::Custom { minutes } => datetime
+                .and_local_timezone(FixedOffset::east_opt(i32::from(minutes) * 60).unwrap())
+                .unwrap()
+                .naive_utc(),
+        }
+    } else {
+        datetime
+            .and_local_timezone(now.timezone())
+            .unwrap()
+            .naive_utc()
     }
 }
 
