@@ -15,6 +15,7 @@ use super::{revision::Revision, revision_file::RevisionFile};
 
 #[derive(Debug)]
 pub enum Ty<'a> {
+    Asset(&'a str),
     Static(&'a str),
     Template(&'a str),
     Content(&'a str),
@@ -22,6 +23,10 @@ pub enum Ty<'a> {
 }
 
 pub fn ty(logical_path: &str) -> Ty<'_> {
+    if let Some(path) = logical_path.strip_prefix("assets/") {
+        return Ty::Asset(path);
+    }
+
     if let Some(path) = logical_path.strip_prefix("content/") {
         return Ty::Content(path);
     }

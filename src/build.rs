@@ -63,6 +63,33 @@ pub fn create_revision(
             NewRevisionFile::new(rev.id, new_input_file.id).create(conn)?;
 
             match input_file::ty(&asset.meta.logical_path) {
+                Ty::Asset(path) => {
+                    tracing::trace!("Adding asset route: {}", path);
+
+                    let asset_path = Path::new(path);
+                    let asset_ext = asset_path.extension();
+
+                    if asset_ext.map_or(false, |ext| ext.eq_ignore_ascii_case("css")) {
+                        let parent = asset_path.parent();
+                        let file_stem = asset_path.file_stem().unwrap();
+                        let mut file_stem = file_stem.to_string_lossy().to_string();
+                        file_stem.push('.');
+                        file_stem.push_str(&content_hash_string);
+                        file_stem.push_str(".css");
+                        let path = parent
+                            .map(|parent| {
+                                parent
+                                    .join(Path::new(&file_stem))
+                                    .to_string_lossy()
+                                    .to_string()
+                            })
+                            .unwrap_or(file_stem);
+
+                        NewRoute::new(rev.id, &path, new_input_file.id).create(conn)?;
+                    } else {
+                        NewRoute::new(rev.id, path, new_input_file.id).create(conn)?;
+                    }
+                }
                 Ty::Content(path) => {
                     if let Some(path) = path.strip_suffix(".md") {
                         let path = format!("{path}.html");

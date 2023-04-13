@@ -37,6 +37,25 @@ pub fn dist_revision(
         let input_file = InputFile::by_id(&r.input_file_id).get_result(conn)?;
 
         match input_file.ty() {
+            Ty::Asset(path) => {
+                debug_assert!(input_file.contents.is_none());
+
+                if Path::new(path)
+                    .extension()
+                    .map_or(false, |ext| ext.eq_ignore_ascii_case("css"))
+                {
+                    let content_hash_string =
+                        format!("{:x}", input_file.contents_hash.iter().format(""));
+                    let cache_path = cache_dir.join(content_hash_string);
+                    assert!(cache_path.exists());
+                    tracing::trace!(
+                        "Copying file {} to {}",
+                        cache_path.display(),
+                        dest_path.display()
+                    );
+                    fs::copy(cache_path, dest_path)?;
+                }
+            }
             Ty::Content(_) => {
                 if let Some(contents) = input_file.contents {
                     let page = Page::by_input_file_id(&input_file.id).get_result(conn)?;

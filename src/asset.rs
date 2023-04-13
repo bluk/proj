@@ -104,7 +104,7 @@ where
     Ok(())
 }
 
-const SRC_SUB_DIRS: &[&str] = &["content", "static", "templates"];
+const SRC_SUB_DIRS: &[&str] = &["assets", "content", "static", "templates"];
 
 fn walk_src_dirs<F>(src: &Path, mut f: F) -> anyhow::Result<()>
 where
