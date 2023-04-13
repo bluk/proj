@@ -5,6 +5,7 @@ use std::{fs, path::Path};
 use diesel::prelude::*;
 use handlebars::Handlebars;
 use itertools::Itertools;
+use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
 use lol_html::{HtmlRewriter, Settings};
 use pulldown_cmark::{html, Options, Parser};
 use serde_json::json;
@@ -88,7 +89,16 @@ pub fn dist_revision(
                         cache_path.display(),
                         dest_path.display()
                     );
-                    fs::copy(cache_path, dest_path)?;
+
+                    let stylesheet_contents = fs::read_to_string(cache_path)?;
+
+                    let parser_options = ParserOptions::default();
+                    let mut stylesheet =
+                        StyleSheet::parse(&stylesheet_contents, parser_options).unwrap();
+                    stylesheet.minify(MinifyOptions::default())?;
+
+                    let output = stylesheet.to_css(PrinterOptions::default())?;
+                    fs::write(dest_path, output.code)?;
                 }
             }
             Ty::Content(_) => {
