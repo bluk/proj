@@ -18,6 +18,39 @@ use crate::models::{
     DbConn,
 };
 
+fn rewrite_html(
+    html: &[u8],
+    route: &str,
+    rev: &Revision,
+    conn: &mut DbConn,
+) -> anyhow::Result<Vec<u8>> {
+    let mut output = Vec::new();
+    let mut rewriter = HtmlRewriter::new(
+        Settings {
+            element_content_handlers: vec![lol_html::element!("link[href]", |el| {
+                let href = el.get_attribute("href").expect("href was required");
+                match Url::parse(&href) {
+                    Err(url::ParseError::RelativeUrlWithoutBase) => {
+                        let base = Url::parse("https://localhost/").unwrap().join(route)?;
+                        let url = base.join(&href)?;
+                        let path = url.path();
+                        let route = InputFile::asset_route(rev, path, conn)?;
+                        el.set_attribute("href", &route)?;
+                    }
+                    Ok(_) | Err(_) => {}
+                }
+
+                Ok(())
+            })],
+            ..Settings::default()
+        },
+        |c: &[u8]| output.extend_from_slice(c),
+    );
+    rewriter.write(html)?;
+    rewriter.end()?;
+    Ok(output)
+}
+
 pub fn dist_revision(
     dest: &Path,
     rev: &Revision,
@@ -82,37 +115,7 @@ pub fn dist_revision(
                         let html_output =
                             templates.render(&template_name, &json!({ "content": contents }))?;
 
-                        let mut output = Vec::new();
-                        let mut rewriter = HtmlRewriter::new(
-                            Settings {
-                                element_content_handlers: vec![lol_html::element!(
-                                    "link[href]",
-                                    |el| {
-                                        let href =
-                                            el.get_attribute("href").expect("href was required");
-                                        match Url::parse(&href) {
-                                            Err(url::ParseError::RelativeUrlWithoutBase) => {
-                                                let base = Url::parse("https://localhost/")
-                                                    .unwrap()
-                                                    .join(&r.route)?;
-                                                let url = base.join(&href)?;
-                                                let path = url.path();
-                                                let route =
-                                                    InputFile::asset_route(rev, path, conn)?;
-                                                el.set_attribute("href", &route)?;
-                                            }
-                                            Ok(_) | Err(_) => {}
-                                        }
-
-                                        Ok(())
-                                    }
-                                )],
-                                ..Settings::default()
-                            },
-                            |c: &[u8]| output.extend_from_slice(c),
-                        );
-                        rewriter.write(html_output.as_bytes())?;
-                        rewriter.end()?;
+                        let output = rewrite_html(html_output.as_bytes(), &r.route, rev, conn)?;
 
                         tracing::trace!("Writing content to file: {}", dest_path.display());
                         fs::write(dest_path, output)?;
@@ -123,10 +126,19 @@ pub fn dist_revision(
                     unreachable!("content was not in database");
                 }
             }
-            Ty::Static(_) => {
-                if let Some(contents) = input_file.contents {
-                    tracing::trace!("Writing file: {}", dest_path.display());
-                    fs::write(dest_path, contents)?;
+            Ty::Static(path) => {
+                if let Some(contents) = &input_file.contents {
+                    if Path::new(path)
+                        .extension()
+                        .map_or(false, |ext| ext.eq_ignore_ascii_case("html"))
+                    {
+                        tracing::trace!("Writing file: {}", dest_path.display());
+                        let contents = rewrite_html(contents, &r.route, rev, conn)?;
+                        fs::write(dest_path, contents)?;
+                    } else {
+                        tracing::trace!("Writing file: {}", dest_path.display());
+                        fs::write(dest_path, contents)?;
+                    }
                 } else {
                     let content_hash_string =
                         format!("{:x}", input_file.contents_hash.iter().format(""));

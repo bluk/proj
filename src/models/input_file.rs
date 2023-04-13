@@ -1,5 +1,4 @@
 use core::fmt;
-use std::path::Path;
 
 use chrono::NaiveDateTime;
 use diesel::{
