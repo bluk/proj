@@ -35,6 +35,11 @@ fn main() -> anyhow::Result<()> {
 
     let pool = models::establish_connection_pool(&args.database_url)?;
 
+    {
+        let mut conn = pool.get()?;
+        models::run_migrations(&mut conn).expect("migrations could not be run");
+    }
+
     let src = &args.src;
     assert!(src.is_dir());
     let dest = &args.dest;
