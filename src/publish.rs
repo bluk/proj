@@ -5,8 +5,10 @@ use std::{fs, path::Path};
 use diesel::prelude::*;
 use handlebars::Handlebars;
 use itertools::Itertools;
+use lol_html::{HtmlRewriter, Settings};
 use pulldown_cmark::{html, Options, Parser};
 use serde_json::json;
+use url::Url;
 
 use crate::models::{
     input_file::{InputFile, Ty},
@@ -80,8 +82,40 @@ pub fn dist_revision(
                         let html_output =
                             templates.render(&template_name, &json!({ "content": contents }))?;
 
+                        let mut output = Vec::new();
+                        let mut rewriter = HtmlRewriter::new(
+                            Settings {
+                                element_content_handlers: vec![lol_html::element!(
+                                    "link[href]",
+                                    |el| {
+                                        let href =
+                                            el.get_attribute("href").expect("href was required");
+                                        match Url::parse(&href) {
+                                            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                                                let base = Url::parse("https://localhost/")
+                                                    .unwrap()
+                                                    .join(&r.route)?;
+                                                let url = base.join(&href)?;
+                                                let path = url.path();
+                                                let route =
+                                                    InputFile::asset_route(rev, path, conn)?;
+                                                el.set_attribute("href", &route)?;
+                                            }
+                                            Ok(_) | Err(_) => {}
+                                        }
+
+                                        Ok(())
+                                    }
+                                )],
+                                ..Settings::default()
+                            },
+                            |c: &[u8]| output.extend_from_slice(c),
+                        );
+                        rewriter.write(html_output.as_bytes())?;
+                        rewriter.end()?;
+
                         tracing::trace!("Writing content to file: {}", dest_path.display());
-                        fs::write(dest_path, html_output)?;
+                        fs::write(dest_path, output)?;
                     } else {
                         todo!();
                     }
