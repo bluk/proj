@@ -70,6 +70,11 @@ pub fn dist_revision(
 
     for r in routes {
         let dest_path = dest.join(Path::new(&r.route));
+        if let Some(parent) = dest_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
+        }
         let input_file = InputFile::by_id(&r.input_file_id).get_result(conn)?;
 
         match input_file.ty() {
@@ -85,7 +90,7 @@ pub fn dist_revision(
                     let cache_path = cache_dir.join(content_hash_string);
                     assert!(cache_path.exists());
                     tracing::trace!(
-                        "Copying file {} to {}",
+                        "Writing file {} to {}",
                         cache_path.display(),
                         dest_path.display()
                     );
