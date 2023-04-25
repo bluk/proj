@@ -13,7 +13,7 @@ use ignore::Walk;
 use memmap2::Mmap;
 use rayon::prelude::*;
 
-const INLINE_CONTENT: &[&str] = &["hbs", "html", "md"];
+const INLINE_CONTENT: &[&str] = &["css", "hbs", "html", "md"];
 
 #[derive(Debug)]
 struct EmptyContents {}

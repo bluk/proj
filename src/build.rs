@@ -6,6 +6,7 @@ use std::{fs, path::Path, sync::mpsc};
 
 use diesel::Connection;
 use itertools::Itertools;
+use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
 use toml_edit::Document;
 
 use crate::{
@@ -30,11 +31,32 @@ pub fn create_revision(
         let rev = Revision::create(conn)?;
 
         // TODO: Should receive a "Done" event to commit the transaction
-        while let Ok(asset) = evt_rx.recv() {
-            let is_inline = asset.meta.is_inline();
-
+        while let Ok(mut asset) = evt_rx.recv() {
             let content_hash_string = format!("{:x}", asset.hash.as_bytes().iter().format(""));
             let id = format!("{content_hash_string},{}", asset.meta.logical_path);
+
+            let is_inline = asset.meta.is_inline();
+            let ty = input_file::ty(&asset.meta.logical_path);
+
+            match ty {
+                Ty::Asset(path) => {
+                    if Path::new(path)
+                        .extension()
+                        .map_or(false, |ext| ext.eq_ignore_ascii_case("css"))
+                    {
+                        let parser_options = ParserOptions::default();
+                        let contents = core::str::from_utf8(&asset.contents)?;
+                        let mut stylesheet = StyleSheet::parse(contents, parser_options).unwrap();
+                        stylesheet.minify(MinifyOptions::default())?;
+
+                        let output = stylesheet.to_css(PrinterOptions::default())?;
+                        let contents = Box::new(output.code.as_bytes().to_vec());
+                        drop(stylesheet);
+                        asset.contents = contents;
+                    }
+                }
+                Ty::Static(_) | Ty::Template(_) | Ty::Content(_) | Ty::Unknown => {}
+            }
 
             let new_input_file = NewInputFile::new(
                 &id,
@@ -42,6 +64,7 @@ pub fn create_revision(
                 asset.hash.as_bytes().as_slice(),
                 is_inline.then_some(&asset.contents),
             );
+
             let created_input_file = new_input_file.create(conn)? != 0;
 
             if !is_inline {
@@ -62,7 +85,7 @@ pub fn create_revision(
 
             NewRevisionFile::new(rev.id, new_input_file.id).create(conn)?;
 
-            match input_file::ty(&asset.meta.logical_path) {
+            match ty {
                 Ty::Asset(path) => {
                     tracing::trace!("Adding asset route: {}", path);
 

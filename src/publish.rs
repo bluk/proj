@@ -5,7 +5,6 @@ use std::{fs, path::Path};
 use diesel::prelude::*;
 use handlebars::Handlebars;
 use itertools::Itertools;
-use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
 use lol_html::{HtmlRewriter, Settings};
 use pulldown_cmark::{html, Options, Parser};
 use serde_json::json;
@@ -22,6 +21,7 @@ use crate::models::{
 fn rewrite_html(
     html: &[u8],
     route: &str,
+    _cache_dir: &Path,
     rev: &Revision,
     conn: &mut DbConn,
 ) -> anyhow::Result<Vec<u8>> {
@@ -35,8 +35,11 @@ fn rewrite_html(
                         let base = Url::parse("https://localhost/").unwrap().join(route)?;
                         let url = base.join(&href)?;
                         let path = url.path();
+                        // let input_file = InputFile::asset(rev, path, conn)?;
+                        // let sri_hash = input_file.sri_hash(cache_dir)?;
                         let route = InputFile::asset_route(rev, path, conn)?;
                         el.set_attribute("href", &route)?;
+                        // el.set_attribute("integrity", &sri_hash)?;
                     }
                     Ok(_) | Err(_) => {}
                 }
@@ -78,34 +81,6 @@ pub fn dist_revision(
         let input_file = InputFile::by_id(&r.input_file_id).get_result(conn)?;
 
         match input_file.ty() {
-            Ty::Asset(path) => {
-                debug_assert!(input_file.contents.is_none());
-
-                if Path::new(path)
-                    .extension()
-                    .map_or(false, |ext| ext.eq_ignore_ascii_case("css"))
-                {
-                    let content_hash_string =
-                        format!("{:x}", input_file.contents_hash.iter().format(""));
-                    let cache_path = cache_dir.join(content_hash_string);
-                    assert!(cache_path.exists());
-                    tracing::trace!(
-                        "Writing file {} to {}",
-                        cache_path.display(),
-                        dest_path.display()
-                    );
-
-                    let stylesheet_contents = fs::read_to_string(cache_path)?;
-
-                    let parser_options = ParserOptions::default();
-                    let mut stylesheet =
-                        StyleSheet::parse(&stylesheet_contents, parser_options).unwrap();
-                    stylesheet.minify(MinifyOptions::default())?;
-
-                    let output = stylesheet.to_css(PrinterOptions::default())?;
-                    fs::write(dest_path, output.code)?;
-                }
-            }
             Ty::Content(_) => {
                 if let Some(contents) = input_file.contents {
                     let page = Page::by_input_file_id(&input_file.id).get_result(conn)?;
@@ -130,7 +105,8 @@ pub fn dist_revision(
                         let html_output =
                             templates.render(&template_name, &json!({ "content": contents }))?;
 
-                        let output = rewrite_html(html_output.as_bytes(), &r.route, rev, conn)?;
+                        let output =
+                            rewrite_html(html_output.as_bytes(), &r.route, cache_dir, rev, conn)?;
 
                         tracing::trace!("Writing content to file: {}", dest_path.display());
                         fs::write(dest_path, output)?;
@@ -141,17 +117,20 @@ pub fn dist_revision(
                     unreachable!("content was not in database");
                 }
             }
-            Ty::Static(path) => {
+            Ty::Asset(path) | Ty::Static(path) => {
                 if let Some(contents) = &input_file.contents {
                     if Path::new(path)
                         .extension()
                         .map_or(false, |ext| ext.eq_ignore_ascii_case("html"))
                     {
                         tracing::trace!("Writing file: {}", dest_path.display());
-                        let contents = rewrite_html(contents, &r.route, rev, conn)?;
+                        let contents = rewrite_html(contents, &r.route, cache_dir, rev, conn)?;
                         fs::write(dest_path, contents)?;
                     } else {
-                        tracing::trace!("Writing file: {}", dest_path.display());
+                        tracing::trace!(
+                            "Writing file from database contents: {}",
+                            dest_path.display()
+                        );
                         fs::write(dest_path, contents)?;
                     }
                 } else {

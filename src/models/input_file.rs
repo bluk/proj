@@ -1,5 +1,7 @@
 use core::fmt;
+use std::{fs, path::Path};
 
+use base64ct::{Base64, Encoding};
 use chrono::NaiveDateTime;
 use diesel::{
     backend::Backend,
@@ -8,6 +10,7 @@ use diesel::{
     prelude::*,
     sql_types::Text,
 };
+use itertools::Itertools;
 
 use crate::{
     models::DbConn,
@@ -115,6 +118,15 @@ impl InputFile {
     }
 
     #[inline]
+    pub fn asset(rev: &Revision, name: &str, conn: &mut DbConn) -> QueryResult<Self> {
+        RevisionFile::belonging_to(rev)
+            .inner_join(input_files::table)
+            .filter(with_logical_path(format!("assets{name}")))
+            .select(Self::as_select())
+            .get_result(conn)
+    }
+
+    #[inline]
     pub fn asset_route(rev: &Revision, name: &str, conn: &mut DbConn) -> QueryResult<String> {
         let input_files = RevisionFile::belonging_to(rev)
             .inner_join(input_files::table)
@@ -131,6 +143,25 @@ impl InputFile {
     #[must_use]
     pub fn ty(&self) -> Ty<'_> {
         ty(&self.logical_path)
+    }
+
+    pub fn sri_hash(&self, cache_dir: &Path) -> anyhow::Result<String> {
+        use sha2::{Digest, Sha384};
+
+        let mut hasher = Sha384::new();
+        if let Some(contents) = &self.contents {
+            hasher.update(contents);
+        } else {
+            let content_hash_string = format!("{:x}", self.contents_hash.iter().format(""));
+            let cache_path = cache_dir.join(content_hash_string);
+            let contents = fs::read(cache_path)?;
+            hasher.update(contents);
+        }
+
+        let result = hasher.finalize();
+        let hash = Base64::encode_string(&result[..]);
+
+        Ok(format!("sha384-{hash}"))
     }
 }
 
