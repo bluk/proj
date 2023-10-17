@@ -66,7 +66,7 @@ impl fmt::Debug for Asset {
             .field("meta", &self.meta)
             // .field("contents", &self.contents)
             .field("hash", &self.hash)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
