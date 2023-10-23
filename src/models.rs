@@ -16,10 +16,8 @@ pub type DbId = i64;
 pub type DbConn = SqliteConnection;
 pub type DbPool = Pool<ConnectionManager<DbConn>>;
 
-pub fn establish_connection_pool(
-    url: &str,
-) -> Result<Pool<ConnectionManager<SqliteConnection>>, r2d2::Error> {
-    let manager = ConnectionManager::<SqliteConnection>::new(url);
+pub fn establish_connection_pool(url: &str) -> Result<DbPool, r2d2::Error> {
+    let manager = ConnectionManager::new(url);
     Pool::builder().test_on_check_out(true).build(manager)
 }
 
