@@ -35,6 +35,7 @@ pub enum Error {
     Eof,
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn parse(contents: &str) -> Result<(Option<&str>, usize, &str), Error> {
     let mut state = State::SearchForBeginMarker;
     let mut chars = contents.char_indices();
@@ -205,9 +206,9 @@ mod tests {
 
     #[test]
     fn no_front_matter() {
-        let input = r#"
+        let input = r"
 Hello world!;
-"#;
+";
 
         assert_eq!(Ok((None, 0, input)), parse(input));
     }
@@ -250,12 +251,12 @@ Hello.
 
     #[test]
     fn empty_front_matter() {
-        let input = r#"
+        let input = r"
 +++
 +++
-Hello."#;
+Hello.";
 
-        assert_eq!(Ok((Some(r#""#), 9, r#"Hello."#)), parse(input));
+        assert_eq!(Ok((Some(r""), 9, "Hello.")), parse(input));
     }
 
     #[test]
@@ -267,7 +268,7 @@ title = "Hello World!"
 Hello."#;
 
         assert_eq!(
-            Ok((Some(r#"title = "Hello World!""#), 32, r#"Hello."#)),
+            Ok((Some(r#"title = "Hello World!""#), 32, "Hello.")),
             parse(input)
         );
     }

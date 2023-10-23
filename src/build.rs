@@ -22,6 +22,7 @@ use crate::{
     },
 };
 
+#[allow(clippy::too_many_lines)]
 pub fn create_revision(
     evt_rx: &mpsc::Receiver<Asset>,
     cache_dir: &Path,
