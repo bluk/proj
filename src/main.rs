@@ -10,7 +10,9 @@ mod build;
 mod content;
 mod models;
 mod publish;
+#[allow(clippy::wildcard_imports)]
 mod schema;
+mod sqlite_mapping;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

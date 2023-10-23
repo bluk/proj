@@ -14,7 +14,7 @@ use crate::{models::DbConn, schema::pages};
 pub struct Page {
     pub input_file_id: String,
     pub front_matter: Option<String>,
-    pub offset: i32,
+    pub offset: i64,
     pub date: Option<NaiveDateTime>,
     pub description: Option<String>,
     pub excerpt: Option<String>,
@@ -67,7 +67,7 @@ impl Page {
 pub struct NewPage<'a> {
     pub input_file_id: &'a str,
     pub front_matter: Option<&'a str>,
-    pub offset: i32,
+    pub offset: i64,
     pub date: Option<NaiveDateTime>,
     pub description: Option<&'a str>,
     pub excerpt: Option<&'a str>,

@@ -2,6 +2,7 @@
 # see https://diesel.rs/guides/configuring-diesel-cli
 
 [print_schema]
+import_types = ["crate::sqlite_mapping::*"]
 file = "src/schema.rs"
 
 [migrations_directory]

@@ -127,7 +127,7 @@ pub fn create_revision(
                             let mut page = NewPage {
                                 input_file_id: &id,
                                 front_matter,
-                                offset: i32::try_from(content_offset)?,
+                                offset: i64::try_from(content_offset)?,
                                 date: None,
                                 description: None,
                                 excerpt: None,

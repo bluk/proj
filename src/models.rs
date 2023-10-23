@@ -12,7 +12,7 @@ pub mod revision;
 pub mod revision_file;
 pub mod route;
 
-pub type DbId = i32;
+pub type DbId = i64;
 pub type DbConn = SqliteConnection;
 pub type DbPool = Pool<ConnectionManager<DbConn>>;
 

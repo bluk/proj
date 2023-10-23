@@ -3,7 +3,7 @@ use diesel::{
     expression::AsExpression,
     helper_types::{AsSelect, Filter, Select},
     prelude::*,
-    sql_types::Integer,
+    sql_types::BigInt,
 };
 
 use crate::{
@@ -28,7 +28,7 @@ type WithRevisionId<T> = diesel::dsl::Eq<routes::revision_id, T>;
 #[must_use]
 pub fn with_revision_id<T>(id: T) -> WithRevisionId<T>
 where
-    T: AsExpression<Integer>,
+    T: AsExpression<BigInt>,
 {
     routes::revision_id.eq(id)
 }

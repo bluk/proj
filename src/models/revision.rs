@@ -6,7 +6,7 @@ use diesel::{
     expression::AsExpression,
     helper_types::{AsSelect, Filter, Select},
     prelude::*,
-    sql_types::Integer,
+    sql_types::BigInt,
 };
 
 use crate::{
@@ -26,7 +26,7 @@ type WithId<T> = diesel::dsl::Eq<revisions::id, T>;
 #[must_use]
 pub fn with_id<T>(id: T) -> WithId<T>
 where
-    T: AsExpression<Integer>,
+    T: AsExpression<BigInt>,
 {
     revisions::id.eq(id)
 }
