@@ -3,7 +3,6 @@ use std::{fs, path::PathBuf};
 use clap::{command, Parser};
 
 use tracing::info;
-use tracing_subscriber::{fmt, prelude::*, EnvFilter};
 
 mod asset;
 mod build;
@@ -28,10 +27,7 @@ struct Args {
 }
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::registry()
-        .with(fmt::layer())
-        .with(EnvFilter::from_default_env())
-        .init();
+    tracing_subscriber::fmt::init();
 
     let args = Args::parse();
 
