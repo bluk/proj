@@ -1,6 +1,8 @@
 use std::error::Error;
 
 use diesel::{
+    backend::Backend,
+    migration::MigrationVersion,
     r2d2::{ConnectionManager, Pool},
     SqliteConnection,
 };
@@ -14,7 +16,7 @@ pub mod route;
 
 pub type DbId = i64;
 pub type DbConn = SqliteConnection;
-pub type DbPool = Pool<ConnectionManager<DbConn>>;
+pub type DbPool = Pool<ConnectionManager<SqliteConnection>>;
 
 pub fn establish_connection_pool(url: &str) -> Result<DbPool, r2d2::Error> {
     let manager = ConnectionManager::new(url);
@@ -23,8 +25,12 @@ pub fn establish_connection_pool(url: &str) -> Result<DbPool, r2d2::Error> {
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
-pub fn run_migrations(conn: &mut DbConn) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    conn.run_pending_migrations(MIGRATIONS)?;
-
-    Ok(())
+pub fn run_migrations<T, DB>(
+    conn: &mut T,
+) -> Result<Vec<MigrationVersion>, Box<dyn Error + Send + Sync + 'static>>
+where
+    T: MigrationHarness<DB>,
+    DB: Backend,
+{
+    conn.run_pending_migrations(MIGRATIONS)
 }
