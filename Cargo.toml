@@ -12,7 +12,7 @@ chrono = { version = "0.4.24", default-features = false }
 clap = { version = "4.2.1", features = ["derive", "env"] }
 diesel = { version = "2.0.3", features = ["chrono", "returning_clauses_for_sqlite_3_35", "r2d2", "sqlite"] }
 diesel_migrations = "2.0.0"
-handlebars = "4.3.6"
+handlebars = "5.1.0"
 ignore = "0.4.19"
 itertools = "0.12.0"
 lightningcss = "1.0.0-alpha.40"
