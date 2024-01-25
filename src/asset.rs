@@ -7,7 +7,6 @@ use std::{
     sync::mpsc::{self},
 };
 
-use anyhow::anyhow;
 use blake3::Hash;
 use ignore::Walk;
 use memmap2::Mmap;
@@ -70,9 +69,9 @@ impl fmt::Debug for Asset {
     }
 }
 
-fn walk_dir<F>(dir: &Path, mut f: F) -> anyhow::Result<()>
+fn walk_dir<F>(dir: &Path, mut f: F) -> io::Result<()>
 where
-    F: FnMut(Metadata) -> anyhow::Result<()>,
+    F: FnMut(Metadata) -> io::Result<()>,
 {
     tracing::debug!("Working on {}", dir.display());
     assert!(dir.is_dir());
@@ -84,7 +83,8 @@ where
             .filter(|disk_path| disk_path.is_file())
         {
             let logical_path = disk_path
-                .strip_prefix(base_path)?
+                .strip_prefix(base_path)
+                .expect("disk path should have been able to strip prefix base_path")
                 .to_str()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "not a valid UTF-8 path"))?
                 .to_string();
@@ -98,17 +98,18 @@ where
             })?;
         }
 
-        Ok::<_, anyhow::Error>(())
-    })??;
+        Ok::<_, io::Error>(())
+    })
+    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))??;
 
     Ok(())
 }
 
 const SRC_SUB_DIRS: &[&str] = &["assets", "content", "static", "templates"];
 
-fn walk_src_dirs<F>(src: &Path, mut f: F) -> anyhow::Result<()>
+fn walk_src_dirs<F>(src: &Path, mut f: F) -> io::Result<()>
 where
-    F: FnMut(Metadata) -> anyhow::Result<()>,
+    F: FnMut(Metadata) -> io::Result<()>,
 {
     for &prefix in SRC_SUB_DIRS {
         let dir = &src.join(prefix);
@@ -118,7 +119,7 @@ where
     Ok(())
 }
 
-pub fn process(sink: &mut mpsc::Sender<Asset>, meta: Metadata) -> anyhow::Result<()> {
+pub fn process(sink: &mut mpsc::Sender<Asset>, meta: Metadata) -> io::Result<()> {
     tracing::debug!("Processing: {}", meta.logical_path);
 
     let contents = meta.contents()?;
@@ -133,7 +134,8 @@ pub fn process(sink: &mut mpsc::Sender<Asset>, meta: Metadata) -> anyhow::Result
         meta,
         contents,
         hash,
-    })?;
+    })
+    .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
     Ok(())
 }
@@ -143,15 +145,13 @@ where
     F: FnOnce(mpsc::Receiver<Asset>) -> anyhow::Result<T> + Sync + Send,
     T: Sync + Send,
 {
-    let (tx, rx) = mpsc::channel();
-
     let mut walk_result = Ok(());
-    let mut send_result = Ok(());
-    let mut process_result = Err(anyhow!(""));
+    let mut process_result = Err(anyhow::anyhow!(""));
 
     rayon::scope(|s| {
+        let (tx, rx) = mpsc::channel();
+
         let walk_result = &mut walk_result;
-        let send_result = &mut send_result;
         let process_result = &mut process_result;
 
         let (event_tx, event_rx) = mpsc::channel::<Asset>();
@@ -162,20 +162,19 @@ where
 
         s.spawn(move |_| {
             *walk_result = walk_src_dirs(src, |metadata| {
-                tx.send(metadata)?;
+                tx.send(metadata)
+                    .expect("metadata should always be sent to receiver");
                 Ok(())
             });
         });
 
-        *send_result = rx
-            .into_iter()
+        rx.into_iter()
             .par_bridge()
             .map_with(event_tx, process)
-            .collect::<Result<_, _>>();
-    });
+            .collect::<Result<_, _>>()
+    })?;
 
     walk_result?;
-    send_result?;
     let res = process_result?;
 
     Ok(res)
