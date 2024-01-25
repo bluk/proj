@@ -20,9 +20,9 @@ mod sqlite_mapping;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, default_value = "./.cache")]
+    #[arg(short, long, env, default_value = "./.cache")]
     cache_dir: PathBuf,
-    #[arg(long, env)]
+    #[arg(short, long, env, default_value = "./site.db")]
     database_url: String,
 
     #[command(subcommand)]
