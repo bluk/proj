@@ -10,7 +10,7 @@ use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, Sty
 use toml_edit::Document;
 
 use crate::{
-    asset::Asset,
+    asset::{Asset, Contents},
     content,
     models::{
         input_file::{self, NewInputFile, Ty},
@@ -21,6 +21,16 @@ use crate::{
         DbConn,
     },
 };
+
+fn preprocess_stylesheet(contents: &Contents) -> anyhow::Result<Contents> {
+    let parser_options = ParserOptions::default();
+    let contents = core::str::from_utf8(contents)?;
+    let mut stylesheet = StyleSheet::parse(contents, parser_options).unwrap();
+    stylesheet.minify(MinifyOptions::default())?;
+
+    let output = stylesheet.to_css(PrinterOptions::default())?;
+    Ok(Box::new(output.code.as_bytes().to_vec()))
+}
 
 #[allow(clippy::too_many_lines)]
 pub fn create_revision(
@@ -38,24 +48,9 @@ pub fn create_revision(
             let is_inline = asset.meta.is_inline();
             let ty = input_file::ty(&asset.meta.logical_path);
 
-            match ty {
-                Ty::Asset(path) => {
-                    if Path::new(path)
-                        .extension()
-                        .map_or(false, |ext| ext.eq_ignore_ascii_case("css"))
-                    {
-                        let parser_options = ParserOptions::default();
-                        let contents = core::str::from_utf8(&asset.contents)?;
-                        let mut stylesheet = StyleSheet::parse(contents, parser_options).unwrap();
-                        stylesheet.minify(MinifyOptions::default())?;
-
-                        let output = stylesheet.to_css(PrinterOptions::default())?;
-                        let contents = Box::new(output.code.as_bytes().to_vec());
-                        drop(stylesheet);
-                        asset.contents = contents;
-                    }
-                }
-                Ty::Static(_) | Ty::Template(_) | Ty::Content(_) | Ty::Unknown => {}
+            // Pre-process content such as minification which would always done per fetch/publish regardless of user.
+            if ty.is_stylesheet() {
+                asset.contents = preprocess_stylesheet(&asset.contents)?;
             }
 
             let new_input_file = NewInputFile::new(
@@ -92,7 +87,10 @@ pub fn create_revision(
                     let asset_path = Path::new(path);
                     let asset_ext = asset_path.extension();
 
-                    if asset_ext.map_or(false, |ext| ext.eq_ignore_ascii_case("css")) {
+                    if asset_ext
+                        .map(|ext| ext.eq_ignore_ascii_case("css"))
+                        .unwrap_or_default()
+                    {
                         let parent = asset_path.parent();
                         let file_stem = asset_path.file_stem().unwrap();
                         let mut file_stem = file_stem.to_string_lossy().to_string();

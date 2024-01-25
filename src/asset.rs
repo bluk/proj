@@ -12,6 +12,10 @@ use ignore::Walk;
 use memmap2::Mmap;
 use rayon::prelude::*;
 
+/// File types to store in the databse inline.
+///
+/// The original data is processed potentially before inserting it into the
+/// database and when being published/retrieved from the database.
 const INLINE_CONTENT: &[&str] = &["css", "hbs", "html", "md"];
 
 #[derive(Debug)]
@@ -25,7 +29,7 @@ impl Deref for EmptyContents {
     }
 }
 
-type Contents = Box<dyn Deref<Target = [u8]> + Send + Sync>;
+pub type Contents = Box<dyn Deref<Target = [u8]> + Send + Sync>;
 
 #[derive(Debug)]
 pub struct Metadata {
@@ -73,7 +77,7 @@ fn walk_dir<F>(dir: &Path, mut f: F) -> io::Result<()>
 where
     F: FnMut(Metadata) -> io::Result<()>,
 {
-    tracing::debug!("Working on {}", dir.display());
+    tracing::trace!("Working on {}", dir.display());
     assert!(dir.is_dir());
     let base_path = dir.parent().expect("src directory does not exist");
 
@@ -120,7 +124,7 @@ where
 }
 
 pub fn process(sink: &mut mpsc::Sender<Asset>, meta: Metadata) -> io::Result<()> {
-    tracing::debug!("Processing: {}", meta.logical_path);
+    tracing::trace!("Processing: {}", meta.logical_path);
 
     let contents = meta.contents()?;
 

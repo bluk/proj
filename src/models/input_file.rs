@@ -28,6 +28,18 @@ pub enum Ty<'a> {
     Unknown,
 }
 
+impl<'a> Ty<'a> {
+    pub fn is_stylesheet(&self) -> bool {
+        match self {
+            Ty::Asset(path) => Path::new(path)
+                .extension()
+                .map(|ext| ext.eq_ignore_ascii_case("css"))
+                .unwrap_or_default(),
+            Ty::Static(_) | Ty::Template(_) | Ty::Content(_) | Ty::Unknown => false,
+        }
+    }
+}
+
 pub fn ty(logical_path: &str) -> Ty<'_> {
     if let Some(path) = logical_path.strip_prefix("assets/") {
         return Ty::Asset(path);
