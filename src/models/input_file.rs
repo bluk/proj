@@ -211,7 +211,7 @@ impl<'a> NewInputFile<'a> {
         }
     }
 
-    pub fn create(&self, conn: &mut DbConn) -> QueryResult<usize> {
+    pub fn create(&self, conn: &mut DbConn) -> QueryResult<bool> {
         let existing_count = input_files::dsl::input_files
             .count()
             .filter(with_id(&self.id))
@@ -219,11 +219,13 @@ impl<'a> NewInputFile<'a> {
 
         if existing_count == 0 {
             tracing::debug!("Inserted input file: {}", self.id);
-            diesel::insert_into(input_files::table)
+            let result = diesel::insert_into(input_files::table)
                 .values(self)
-                .execute(conn)
+                .execute(conn)?;
+            assert_eq!(1, result);
+            Ok(true)
         } else {
-            Ok(0)
+            Ok(false)
         }
     }
 }

@@ -2,7 +2,7 @@
 //!
 //! Collect the local file information and builds the metadata.
 
-use std::{path::Path, sync::mpsc};
+use std::{fs, path::Path, sync::mpsc};
 
 use diesel::Connection;
 use itertools::Itertools;
@@ -34,6 +34,7 @@ fn preprocess_stylesheet(contents: &Contents) -> anyhow::Result<Contents> {
 
 #[allow(clippy::too_many_lines)]
 pub fn create_revision(
+    cache_dir: &Path,
     evt_rx: &mpsc::Receiver<Asset>,
     conn: &mut DbConn,
 ) -> anyhow::Result<Revision> {
@@ -43,7 +44,7 @@ pub fn create_revision(
         // TODO: Should receive a "Done" event to commit the transaction
         while let Ok(mut asset) = evt_rx.recv() {
             let content_hash_string = format!("{:x}", asset.hash.as_bytes().iter().format(""));
-            let id = format!("{content_hash_string},{}", asset.meta.logical_path);
+            let input_file_id = format!("{content_hash_string},{}", asset.meta.logical_path);
 
             let is_inline = asset.meta.is_inline();
             let ty = input_file::ty(&asset.meta.logical_path);
@@ -53,32 +54,31 @@ pub fn create_revision(
                 asset.contents = preprocess_stylesheet(&asset.contents)?;
             }
 
-            let new_input_file = NewInputFile::new(
-                &id,
+            let created_input_file = NewInputFile::new(
+                &input_file_id,
                 &asset.meta.logical_path,
                 asset.hash.as_bytes().as_slice(),
                 is_inline.then_some(&asset.contents),
-            );
+            )
+            .create(conn)?;
 
-            let created_input_file = new_input_file.create(conn)? != 0;
+            if !is_inline {
+                let cache_path = cache_dir.join(&content_hash_string);
+                if !cache_path.exists() {
+                    tracing::trace!(
+                        "Copying file {} to {}",
+                        asset.meta.disk_path.display(),
+                        cache_path.display()
+                    );
+                    fs::write(&cache_path, &**asset.contents)?;
+                }
+                debug_assert_eq!(
+                    asset.contents.len() as u64,
+                    cache_path.metadata().unwrap().len()
+                );
+            }
 
-            // if !is_inline {
-            // let cache_path = cache_dir.join(&content_hash_string);
-            // if !cache_path.exists() {
-            //     tracing::trace!(
-            //         "Copying file {} to {}",
-            //         asset.meta.disk_path.display(),
-            //         cache_path.display()
-            //     );
-            //     fs::write(&cache_path, &**asset.contents)?;
-            // }
-            // debug_assert_eq!(
-            //     asset.contents.len() as u64,
-            //     cache_path.metadata().unwrap().len()
-            // );
-            // }
-
-            NewRevisionFile::new(rev.id, new_input_file.id).create(conn)?;
+            NewRevisionFile::new(rev.id, &input_file_id).create(conn)?;
 
             match ty {
                 Ty::Asset(path) => {
@@ -106,23 +106,23 @@ pub fn create_revision(
                             })
                             .unwrap_or(file_stem);
 
-                        NewRoute::new(rev.id, &path, new_input_file.id).create(conn)?;
+                        NewRoute::new(rev.id, &path, &input_file_id).create(conn)?;
                     } else {
-                        NewRoute::new(rev.id, path, new_input_file.id).create(conn)?;
+                        NewRoute::new(rev.id, path, &input_file_id).create(conn)?;
                     }
                 }
                 Ty::Content(path) => {
                     if let Some(path) = path.strip_suffix(".md") {
                         let path = format!("{path}.html");
                         tracing::trace!("Adding content route: {}", path);
-                        NewRoute::new(rev.id, &path, new_input_file.id).create(conn)?;
+                        NewRoute::new(rev.id, &path, &input_file_id).create(conn)?;
 
                         let contents = core::str::from_utf8(&asset.contents)?;
                         let (front_matter, content_offset, _) = content::parse(contents)?;
 
                         if created_input_file {
                             let mut page = NewPage {
-                                input_file_id: &id,
+                                input_file_id: &input_file_id,
                                 front_matter,
                                 offset: i64::try_from(content_offset)?,
                                 date: None,
@@ -171,7 +171,7 @@ pub fn create_revision(
                 }
                 Ty::Static(path) => {
                     tracing::trace!("Adding static route: {}", path);
-                    NewRoute::new(rev.id, path, new_input_file.id).create(conn)?;
+                    NewRoute::new(rev.id, path, &input_file_id).create(conn)?;
                 }
                 Ty::Template(_) => {}
                 Ty::Unknown => {

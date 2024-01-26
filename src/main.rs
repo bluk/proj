@@ -1,5 +1,5 @@
 use std::{
-    io,
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -7,6 +7,8 @@ use clap::{command, Parser, Subcommand};
 
 use models::DbPool;
 use tracing::info;
+
+use crate::models::revision::{self, Revision};
 
 mod asset;
 mod build;
@@ -34,12 +36,14 @@ enum Command {
     /// Create a new revision of the site.
     Create {
         #[arg(short, long, default_value = "./")]
-        src: PathBuf,
+        src_dir: PathBuf,
     },
     /// Publish a revision of the site.
     Publish {
         #[arg(short, long, default_value = "./build")]
-        dest: PathBuf,
+        build_dir: PathBuf,
+        #[arg(short, long)]
+        revision: i64,
     },
 }
 
@@ -47,6 +51,12 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
 
     let args = Args::parse();
+
+    if args.cache_dir.exists() {
+        assert!(args.cache_dir.is_dir());
+    } else {
+        fs::create_dir_all(&args.cache_dir)?;
+    }
 
     let pool = models::establish_connection_pool(&args.database_url)?;
 
@@ -56,21 +66,24 @@ fn main() -> anyhow::Result<()> {
     }
 
     match args.command {
-        Command::Create { src } => create(&src, pool)?,
-        Command::Publish { dest } => publish(&dest)?,
+        Command::Create { src_dir } => create(&src_dir, &args.cache_dir, pool)?,
+        Command::Publish {
+            build_dir,
+            revision,
+        } => publish(revision, &build_dir, &args.cache_dir, pool)?,
     }
 
     Ok(())
 }
 
-fn create(src: &Path, pool: DbPool) -> anyhow::Result<()> {
+fn create(src: &Path, cache_dir: &Path, pool: DbPool) -> anyhow::Result<()> {
     assert!(src.is_dir());
 
     info!("Scanning {}", src.display());
 
     let rev = asset::walk(src, |evt_tx| {
         let mut conn = pool.get()?;
-        build::create_revision(&evt_tx, &mut conn)
+        build::create_revision(cache_dir, &evt_tx, &mut conn)
     })?;
 
     info!("Created revision {}", rev.id);
@@ -78,19 +91,15 @@ fn create(src: &Path, pool: DbPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn publish(_dest: &Path) -> io::Result<()> {
-    todo!()
+fn publish(revision: i64, build_dir: &Path, cache_dir: &Path, pool: DbPool) -> anyhow::Result<()> {
+    use diesel::prelude::*;
+    info!("Building {}", build_dir.display(),);
 
-    // let cache_dir = &args.cache_dir;
-    // if cache_dir.exists() {
-    //     assert!(cache_dir.is_dir());
-    // } else {
-    //     fs::create_dir_all(cache_dir)?;
-    // }
+    let mut conn = pool.get()?;
 
-    // info!("Building {} to {}", src.display(), dest.display(),);
+    let rev = Revision::by_id(revision::Id(revision)).get_result(&mut conn)?;
 
-    // let mut conn = pool.get()?;
+    publish::dist_revision(build_dir, &rev, cache_dir, &mut conn)?;
 
-    // publish::dist_revision(dest, &rev, cache_dir, &mut conn)?;
+    Ok(())
 }
