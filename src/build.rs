@@ -85,31 +85,29 @@ pub fn create_revision(
                     tracing::trace!("Adding asset route: {}", path);
 
                     let asset_path = Path::new(path);
-                    let asset_ext = asset_path.extension();
 
-                    if asset_ext
-                        .map(|ext| ext.eq_ignore_ascii_case("css"))
-                        .unwrap_or_default()
-                    {
-                        let parent = asset_path.parent();
-                        let file_stem = asset_path.file_stem().unwrap();
-                        let mut file_stem = file_stem.to_string_lossy().to_string();
-                        file_stem.push('.');
-                        file_stem.push_str(&content_hash_string);
-                        file_stem.push_str(".css");
-                        let path = parent
-                            .map(|parent| {
-                                parent
-                                    .join(Path::new(&file_stem))
-                                    .to_string_lossy()
-                                    .to_string()
-                            })
-                            .unwrap_or(file_stem);
+                    let parent = asset_path.parent();
+                    let mut file_name = asset_path
+                        .file_stem()
+                        .map(|file_stem| file_stem.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    file_name.push('.');
+                    file_name.push_str(&content_hash_string);
 
-                        NewRoute::new(rev.id, &path, &input_file_id).create(conn)?;
-                    } else {
-                        NewRoute::new(rev.id, path, &input_file_id).create(conn)?;
+                    if let Some(extension) = asset_path.extension() {
+                        file_name.push('.');
+                        file_name.push_str(&extension.to_string_lossy());
                     }
+                    let path = parent
+                        .map(|parent| {
+                            parent
+                                .join(Path::new(&file_name))
+                                .to_string_lossy()
+                                .to_string()
+                        })
+                        .unwrap_or(file_name);
+
+                    NewRoute::new(rev.id, &path, &input_file_id).create(conn)?;
                 }
                 Ty::Content(path) => {
                     if let Some(path) = path.strip_suffix(".md") {
