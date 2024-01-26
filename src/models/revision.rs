@@ -4,7 +4,7 @@ use chrono::NaiveDateTime;
 use diesel::{
     backend::Backend,
     expression::AsExpression,
-    helper_types::{AsSelect, Filter, Select},
+    helper_types::{AsSelect, Desc, Filter, Order, Select},
     prelude::*,
     sql_types::BigInt,
 };
@@ -51,6 +51,15 @@ impl Revision {
         Db: Backend,
     {
         Self::all().filter(with_id(id.0))
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn order_by_created_at_desc<Db>() -> Order<All<Db>, Desc<revisions::created_at>>
+    where
+        Db: Backend,
+    {
+        Self::all().order(revisions::created_at.desc())
     }
 
     pub fn create(conn: &mut DbConn) -> QueryResult<Self> {

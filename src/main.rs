@@ -40,10 +40,12 @@ enum Command {
     },
     /// Publish a revision of the site.
     Publish {
+        /// Directory to publish the build.
         #[arg(short, long, default_value = "./build")]
         build_dir: PathBuf,
+        /// Revision to publish.
         #[arg(short, long)]
-        revision: i64,
+        revision: Option<i64>,
     },
 }
 
@@ -91,13 +93,23 @@ fn create(src: &Path, cache_dir: &Path, pool: DbPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn publish(revision: i64, build_dir: &Path, cache_dir: &Path, pool: DbPool) -> anyhow::Result<()> {
+fn publish(
+    revision: Option<i64>,
+    build_dir: &Path,
+    cache_dir: &Path,
+    pool: DbPool,
+) -> anyhow::Result<()> {
     use diesel::prelude::*;
-    info!("Building {}", build_dir.display(),);
 
     let mut conn = pool.get()?;
 
-    let rev = Revision::by_id(revision::Id(revision)).get_result(&mut conn)?;
+    let rev = if let Some(revision) = revision {
+        Revision::by_id(revision::Id(revision)).get_result(&mut conn)?
+    } else {
+        Revision::order_by_created_at_desc().first(&mut conn)?
+    };
+
+    info!("Building revision {} at {}", rev.id, build_dir.display());
 
     publish::dist_revision(build_dir, &rev, cache_dir, &mut conn)?;
 
