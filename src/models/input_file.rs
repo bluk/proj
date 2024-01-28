@@ -12,10 +12,7 @@ use diesel::{
 };
 use itertools::Itertools;
 
-use crate::{
-    models::DbConn,
-    schema::{input_files, routes},
-};
+use crate::{models::DbConn, schema::input_files};
 
 use super::{revision::Revision, revision_file::RevisionFile};
 
@@ -36,6 +33,16 @@ impl<'a> Ty<'a> {
                 .map(|ext| ext.eq_ignore_ascii_case("css"))
                 .unwrap_or_default(),
             Ty::Static(_) | Ty::Template(_) | Ty::Content(_) | Ty::Unknown => false,
+        }
+    }
+
+    pub fn is_html(&self) -> bool {
+        match self {
+            Ty::Asset(path) | Ty::Static(path) => Path::new(path)
+                .extension()
+                .map(|ext| ext.eq_ignore_ascii_case("html"))
+                .unwrap_or_default(),
+            Ty::Template(_) | Ty::Content(_) | Ty::Unknown => false,
         }
     }
 }
@@ -133,22 +140,8 @@ impl InputFile {
     pub fn asset(rev: &Revision, name: &str, conn: &mut DbConn) -> QueryResult<Self> {
         RevisionFile::belonging_to(rev)
             .inner_join(input_files::table)
-            .filter(with_logical_path(format!("assets{name}")))
+            .filter(with_logical_path(format!("assets/{name}")))
             .select(Self::as_select())
-            .get_result(conn)
-    }
-
-    #[inline]
-    pub fn asset_route(rev: &Revision, name: &str, conn: &mut DbConn) -> QueryResult<String> {
-        let input_files = RevisionFile::belonging_to(rev)
-            .inner_join(input_files::table)
-            .filter(with_logical_path(format!("assets{name}")))
-            .select(input_files::id)
-            .get_result::<String>(conn)?;
-        routes::table
-            .filter(routes::revision_id.eq(rev.id))
-            .filter(routes::input_file_id.eq(input_files))
-            .select(routes::route)
             .get_result(conn)
     }
 

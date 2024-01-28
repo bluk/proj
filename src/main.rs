@@ -7,6 +7,7 @@ use clap::{command, Parser, Subcommand};
 
 use models::DbPool;
 use tracing::info;
+use url::Url;
 
 use crate::models::revision::{self, Revision};
 
@@ -41,6 +42,9 @@ enum Command {
     /// Publish a revision of the site.
     Publish {
         /// Directory to publish the build.
+        #[arg(long, default_value = "https://127.0.0.1")]
+        base_url: Url,
+        /// Directory to publish the build.
         #[arg(short, long, default_value = "./build")]
         build_dir: PathBuf,
         /// Revision to publish.
@@ -70,9 +74,10 @@ fn main() -> anyhow::Result<()> {
     match args.command {
         Command::Create { src_dir } => create(&src_dir, &args.cache_dir, pool)?,
         Command::Publish {
+            base_url,
             build_dir,
             revision,
-        } => publish(revision, &build_dir, &args.cache_dir, pool)?,
+        } => publish(revision, &base_url, &build_dir, &args.cache_dir, pool)?,
     }
 
     Ok(())
@@ -95,6 +100,7 @@ fn create(src: &Path, cache_dir: &Path, pool: DbPool) -> anyhow::Result<()> {
 
 fn publish(
     revision: Option<i64>,
+    base_url: &Url,
     build_dir: &Path,
     cache_dir: &Path,
     pool: DbPool,
@@ -111,7 +117,7 @@ fn publish(
 
     info!("Building revision {} at {}", rev.id, build_dir.display());
 
-    publish::dist_revision(build_dir, &rev, cache_dir, &mut conn)?;
+    publish::dist_revision(build_dir, &rev, base_url, cache_dir, &mut conn)?;
 
     Ok(())
 }
