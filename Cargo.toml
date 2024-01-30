@@ -14,7 +14,7 @@ diesel = { version = "2.0.3", features = ["chrono", "returning_clauses_for_sqlit
 diesel_migrations = "2.0.0"
 handlebars = "5.1.0"
 ignore = "0.4.19"
-itertools = "0.12.0"
+itertools = "0.12.1"
 lightningcss = "1.0.0-alpha.40"
 lol_html = "1.2.0"
 memmap2 = "0.9.0"
