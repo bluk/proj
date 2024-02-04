@@ -5,6 +5,7 @@ use base64ct::{Base64, Encoding};
 use chrono::NaiveDateTime;
 use diesel::{
     backend::Backend,
+    dsl::{exists, not},
     expression::AsExpression,
     helper_types::{AsSelect, Filter, Select},
     prelude::*,
@@ -12,7 +13,10 @@ use diesel::{
 };
 use itertools::Itertools;
 
-use crate::{models::DbConn, schema::input_files};
+use crate::{
+    models::DbConn,
+    schema::{input_files, revision_files},
+};
 
 use super::{revision::Revision, revision_file::RevisionFile};
 
@@ -78,6 +82,14 @@ pub struct InputFile {
 
 type WithId<T> = diesel::dsl::Eq<input_files::id, T>;
 type WithLogicalPath<T> = diesel::dsl::Eq<input_files::logical_path, T>;
+type WithNoRevisionFile<Db> = diesel::dsl::not<
+    diesel::dsl::exists<
+        diesel::dsl::Filter<
+            Select<revision_files::table, AsSelect<RevisionFile, Db>>,
+            diesel::dsl::Eq<input_files::id, revision_files::input_file_id>,
+        >,
+    >,
+>;
 
 #[inline]
 #[must_use]
@@ -86,6 +98,19 @@ where
     T: AsExpression<Text>,
 {
     input_files::id.eq(id)
+}
+
+#[inline]
+#[must_use]
+pub fn with_no_revision_file<Db>() -> WithNoRevisionFile<Db>
+where
+    Db: Backend,
+{
+    not(exists(
+        revision_files::table
+            .select(RevisionFile::as_select())
+            .filter(input_files::id.eq(revision_files::input_file_id)),
+    ))
 }
 
 #[inline]
@@ -117,6 +142,15 @@ impl InputFile {
         Db: Backend,
     {
         Self::all().filter(with_id(id))
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn with_no_revision_file<Db>() -> Filter<All<Db>, WithNoRevisionFile<Db>>
+    where
+        Db: Backend,
+    {
+        Self::all().filter(with_no_revision_file::<Db>())
     }
 
     #[inline]

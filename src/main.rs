@@ -14,6 +14,7 @@ use crate::models::revision::{self, Revision};
 mod asset;
 mod build;
 mod content;
+mod delete;
 mod models;
 mod publish;
 #[allow(clippy::wildcard_imports)]
@@ -51,6 +52,11 @@ enum Command {
         #[arg(short, long)]
         revision: Option<i64>,
     },
+    /// Deletes a revision
+    Delete {
+        #[arg(short, long)]
+        revision: i64,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -78,6 +84,7 @@ fn main() -> anyhow::Result<()> {
             build_dir,
             revision,
         } => publish(revision, &base_url, &build_dir, &args.cache_dir, pool)?,
+        Command::Delete { revision } => delete(revision, pool)?,
     }
 
     Ok(())
@@ -118,6 +125,20 @@ fn publish(
     info!("Building revision {} at {}", rev.id, build_dir.display());
 
     publish::dist_revision(build_dir, &rev, base_url, cache_dir, &mut conn)?;
+
+    Ok(())
+}
+
+fn delete(revision: i64, pool: DbPool) -> anyhow::Result<()> {
+    use diesel::prelude::*;
+
+    let mut conn = pool.get()?;
+
+    let rev = Revision::by_id(revision::Id(revision)).get_result(&mut conn)?;
+
+    info!("Deleting revision {}", rev.id);
+
+    delete::delete(&rev, &mut conn)?;
 
     Ok(())
 }
