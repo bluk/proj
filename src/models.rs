@@ -3,6 +3,7 @@ use std::error::Error;
 use diesel::{
     backend::Backend,
     migration::MigrationVersion,
+    prelude::*,
     r2d2::{ConnectionManager, Pool},
     SqliteConnection,
 };
@@ -16,11 +17,17 @@ pub mod route;
 
 pub type DbId = i64;
 pub type DbConn = SqliteConnection;
-pub type DbPool = Pool<ConnectionManager<SqliteConnection>>;
+
+#[derive(Debug)]
+pub struct DbPool {
+    inner: Pool<ConnectionManager<SqliteConnection>>,
+}
 
 pub fn establish_connection_pool(url: &str) -> Result<DbPool, r2d2::Error> {
     let manager = ConnectionManager::new(url);
-    Pool::builder().test_on_check_out(true).build(manager)
+    Ok(DbPool {
+        inner: Pool::builder().test_on_check_out(true).build(manager)?,
+    })
 }
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
@@ -33,4 +40,16 @@ where
     DB: Backend,
 {
     conn.run_pending_migrations(MIGRATIONS)
+}
+
+impl DbPool {
+    pub fn get(
+        &self,
+    ) -> Result<r2d2::PooledConnection<ConnectionManager<SqliteConnection>>, r2d2::Error> {
+        let mut conn = self.inner.get()?;
+        diesel::sql_query("PRAGMA foreign_keys = ON")
+            .execute(&mut conn)
+            .expect("foreign keys should be enabled");
+        Ok(conn)
+    }
 }
