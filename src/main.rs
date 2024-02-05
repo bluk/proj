@@ -13,6 +13,7 @@ use crate::models::revision::{self, Revision};
 
 mod asset;
 mod build;
+mod cleanup;
 mod content;
 mod delete;
 mod models;
@@ -57,6 +58,8 @@ enum Command {
         #[arg(short, long)]
         revision: i64,
     },
+    /// Removes unreachable data in the database and cache.
+    Cleanup,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -85,6 +88,7 @@ fn main() -> anyhow::Result<()> {
             revision,
         } => publish(revision, &base_url, &build_dir, &args.cache_dir, pool)?,
         Command::Delete { revision } => delete(revision, pool)?,
+        Command::Cleanup => cleanup(&args.cache_dir, pool)?,
     }
 
     Ok(())
@@ -139,6 +143,18 @@ fn delete(revision: i64, pool: DbPool) -> anyhow::Result<()> {
     info!("Deleting revision {}", rev.id);
 
     delete::delete(&rev, &mut conn)?;
+
+    Ok(())
+}
+
+fn cleanup(cache_dir: &Path, pool: DbPool) -> anyhow::Result<()> {
+    use diesel::prelude::*;
+
+    let mut conn = pool.get()?;
+
+    info!("Cleaning up");
+
+    cleanup::cleanup(cache_dir, &mut conn)?;
 
     Ok(())
 }
