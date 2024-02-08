@@ -1,5 +1,8 @@
 use core::fmt;
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use base64ct::{Base64, Encoding};
 use chrono::NaiveDateTime;
@@ -201,6 +204,19 @@ impl InputFile {
         let hash = Base64::encode_string(&result[..]);
 
         Ok(format!("sha384-{hash}"))
+    }
+
+    /// Returns the path to be used in the cache directory.
+    #[must_use]
+    pub fn cache_file_name(&self) -> Option<PathBuf> {
+        if self.contents.is_some() {
+            return None;
+        }
+
+        let contents_hash =
+            blake3::Hash::from_bytes(self.contents_hash.as_slice().try_into().unwrap());
+        let content_hash_string = format!("{:x}", contents_hash.as_bytes().iter().format(""));
+        Some(PathBuf::from(content_hash_string))
     }
 }
 
