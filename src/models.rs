@@ -47,9 +47,24 @@ impl DbPool {
         &self,
     ) -> Result<r2d2::PooledConnection<ConnectionManager<SqliteConnection>>, r2d2::Error> {
         let mut conn = self.inner.get()?;
+
+        // Need to enable pragmas per connection.
+        // sqlite silently ignores unknown pragmas and values so there is not an easy way to verify the return values.
+
+        // Necessary to enable for foreign key constraints
+        // https://www.sqlite.org/pragma.html#pragma_foreign_keys
         diesel::sql_query("PRAGMA foreign_keys = ON")
             .execute(&mut conn)
             .expect("foreign keys should be enabled");
+
+        // Only really need to enable once, but go ahead and enable it per connection.
+        // Allows concurrent readers and writers.
+        // https://www.sqlite.org/pragma.html#pragma_journal_mode
+        // https://www.sqlite.org/wal.html
+        diesel::sql_query("PRAGMA journal_mode=WAL")
+            .execute(&mut conn)
+            .expect("WAL journal mode should be enabled");
+
         Ok(conn)
     }
 }
